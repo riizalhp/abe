@@ -1,0 +1,8 @@
+{
+  "name": "ABE - Aplikasi Bengkel E...",
+  "description": "Sistem manajemen bengkel cerdas dengan fitur diagnosa AI dan manajemen stok otomatis.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
