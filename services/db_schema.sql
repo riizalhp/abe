@@ -108,3 +108,26 @@ CREATE POLICY "Public Write Bookings" ON bookings FOR ALL USING (true);
 
 CREATE POLICY "Public Read Reminders" ON reminders FOR SELECT USING (true);
 CREATE POLICY "Public Write Reminders" ON reminders FOR ALL USING (true);
+
+-- RPC Function to execute arbitrary SQL (Only for OWNER)
+-- WARNING: This allows full database access. Use with caution.
+CREATE OR REPLACE FUNCTION exec_sql(query text)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_role text;
+  result json;
+BEGIN
+  -- Check if the user is an OWNER
+  SELECT role INTO v_role FROM public.users WHERE id = auth.uid();
+  
+  IF v_role IS NULL OR v_role <> 'OWNER' THEN
+    RAISE EXCEPTION 'Access Denied: Only OWNERS can execute raw SQL.';
+  END IF;
+
+  EXECUTE 'SELECT json_agg(t) FROM (' || query || ') t' INTO result;
+  return result;
+END;
+$$;

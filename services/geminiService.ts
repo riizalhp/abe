@@ -1,7 +1,11 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
+if (!API_KEY) {
+  console.warn("Gemini API Key is missing! Please set VITE_GEMINI_API_KEY in .env.local");
+}
+const ai = new GoogleGenAI({ apiKey: API_KEY });
 
 // Audio Diagnosis using Gemini Native Audio model
 export const analyzeAudioDiagnosis = async (audioBase64: string): Promise<string> => {
@@ -13,7 +17,7 @@ export const analyzeAudioDiagnosis = async (audioBase64: string): Promise<string
         parts: [
           {
             inlineData: {
-              mimeType: 'audio/wav', 
+              mimeType: 'audio/wav',
               data: audioBase64
             }
           },
@@ -24,9 +28,10 @@ export const analyzeAudioDiagnosis = async (audioBase64: string): Promise<string
       }
     });
     return response.text || "Tidak dapat menganalisis suara.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Audio Error:", error);
-    return "Gagal menganalisis audio. Pastikan API Key valid.";
+    const errorMessage = error?.message || error?.toString() || "Unknown error";
+    return `Gagal: ${errorMessage}`;
   }
 };
 
@@ -61,9 +66,10 @@ export const analyzeBookingWithAudio = async (audioBase64: string, complaintText
       }
     });
     return response.text || "Analisis AI tidak tersedia.";
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini Booking Analysis Error:", error);
-    return "Gagal memproses analisis AI. Cek koneksi atau format audio.";
+    const errorMessage = error?.message || error?.toString() || "Unknown error";
+    return `Gagal analisis: ${errorMessage}`;
   }
 };
 
@@ -113,10 +119,10 @@ export const predictServiceSchedule = async (vehicleHistory: string): Promise<st
 
 // Generate personalized WhatsApp reminder message
 export const generateMarketingMessage = async (customerName: string, vehicleModel: string, lastServiceDate: string, serviceType: string): Promise<string> => {
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-exp',
-            contents: `Buatkan pesan WhatsApp pengingat servis yang ramah, profesional, dan personal untuk pelanggan bengkel 'ABE' (Aplikasi Bengkel). 
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.0-flash-exp',
+      contents: `Buatkan pesan WhatsApp pengingat servis yang ramah, profesional, dan personal untuk pelanggan bengkel 'ABE' (Aplikasi Bengkel). 
             
             Data:
             Nama: ${customerName}
@@ -125,10 +131,10 @@ export const generateMarketingMessage = async (customerName: string, vehicleMode
             Rekomendasi Servis: ${serviceType}
             
             Pesan harus menyertakan salam, mengingatkan pentingnya servis tersebut, dan ajakan untuk booking. Sertakan link placeholder [LINK BOOKING]. Jangan terlalu panjang.`
-        });
-        return response.text || "Halo, waktunya servis kendaraan Anda.";
-    } catch (error) {
-        console.error("Gemini Message Gen Error:", error);
-        return `Halo ${customerName}, waktunya servis ${serviceType} untuk ${vehicleModel} Anda.`;
-    }
+    });
+    return response.text || "Halo, waktunya servis kendaraan Anda.";
+  } catch (error) {
+    console.error("Gemini Message Gen Error:", error);
+    return `Halo ${customerName}, waktunya servis ${serviceType} untuk ${vehicleModel} Anda.`;
+  }
 }
