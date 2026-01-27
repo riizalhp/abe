@@ -13,13 +13,24 @@ export const userService = {
     },
 
     async create(user: Partial<User>): Promise<User> {
+        // Validate required fields
+        if (!user.name || !user.username || !user.role) {
+            throw new Error('Missing required fields: name, username, or role');
+        }
+
+        console.log('Attempting to insert user:', user);
         const { data, error } = await supabase
             .from('users')
             .insert([user])
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('Supabase error:', error);
+            throw new Error(`Database error: ${error.message} (Code: ${error.code})`);
+        }
+        
+        console.log('User inserted successfully:', data);
         return data as User;
     },
 

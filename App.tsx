@@ -21,6 +21,7 @@ import History from './src/pages/History';
 import CRM from './src/pages/CRM';
 import Bookings from './src/pages/Bookings';
 import Staff from './src/pages/Staff';
+import Queue from './src/pages/Queue';
 
 import GuestBooking from './src/pages/GuestBooking';
 import GuestTracking from './src/pages/GuestTracking';
@@ -75,20 +76,21 @@ function App() {
 
   const handleAddUser = async (user: Partial<User>) => {
     try {
+      console.log('Creating user with data:', user);
       const newUser = await userService.create({
         ...user,
         role: user.role || Role.MEKANIK,
         avatar: user.avatar || '',
         specialization: user.specialization,
         status: 'ACTIVE',
-        performanceScore: user.role === Role.MEKANIK ? 5.0 : undefined,
         username: user.username || `user${Date.now()}`,
         password: user.password || '123'
       });
+      console.log('User created successfully:', newUser);
       setUsers([...users, newUser]);
     } catch (e) {
-      console.error(e);
-      alert("Failed to create user");
+      console.error('User creation failed:', e);
+      alert(`Failed to create user: ${e.message || 'Unknown error'}. Check console for details.`);
     }
   };
 
@@ -241,12 +243,13 @@ function App() {
         <Route element={currentUser ? <MainLayout currentUser={currentUser} onLogout={handleLogout} /> : <Navigate to="/login" />}>
           <Route path="/dashboard" element={<Dashboard stats={dashboardStats} inventory={inventory} />} />
           <Route path="/front-office" element={<FrontOffice onAddQueue={addQueue} />} />
-          <Route path="/mechanic" element={<MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} />} />
+          <Route path="/mechanic-workbench" element={<MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} />} />
           <Route path="/inventory" element={<InventoryView inventory={inventory} onRefresh={refreshData} />} />
           <Route path="/history" element={<History history={history} currentUser={currentUser!} onVoid={handleVoidHistory} />} />
           <Route path="/crm" element={<CRM history={history} reminders={reminders} setReminders={setReminders} />} />
           <Route path="/bookings" element={<Bookings bookings={bookings} setBookings={setBookings} onAddToQueue={addQueue} />} />
           <Route path="/staff" element={<Staff users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} />} />
+          <Route path="/queue" element={<Queue queue={queue} updateStatus={updateQueueStatus} />} />
 
 
           {/* Fallback for under construction */}

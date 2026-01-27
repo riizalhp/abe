@@ -1,4 +1,3 @@
-
 export enum Role {
   OWNER = 'OWNER',
   ADMIN = 'ADMIN',
@@ -52,7 +51,6 @@ export interface User {
   avatar: string;
   specialization?: string; // For mechanics
   status?: 'ACTIVE' | 'BUSY' | 'OFF';
-  performanceScore?: number;
 }
 
 export interface InventoryItem {

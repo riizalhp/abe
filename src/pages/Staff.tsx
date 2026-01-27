@@ -95,12 +95,6 @@ const Staff: React.FC<StaffProps> = ({ users, onAddUser, onDeleteUser }) => {
                         <div className="flex items-center gap-2 pt-4 border-t border-slate-50">
                             <div className={`w-2 h-2 rounded-full ${user.status === 'ACTIVE' ? 'bg-green-500' : 'bg-slate-300'}`}></div>
                             <span className="text-xs font-bold text-slate-500 uppercase">{user.status || 'OFFLINE'}</span>
-                            {user.performanceScore && (
-                                <div className="ml-auto flex items-center text-amber-500 font-bold text-sm">
-                                    <Star className="w-3 h-3 mr-1 fill-amber-500" />
-                                    {user.performanceScore}
-                                </div>
-                            )}
                         </div>
                     </div>
                 ))}

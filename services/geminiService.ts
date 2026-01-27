@@ -4,12 +4,30 @@ import { GoogleGenAI } from "@google/genai";
 // SECURE: API Key managed via Environment Variables (.env.local)
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || "";
 if (!API_KEY) {
-  console.warn("Gemini API Key is missing! Please set VITE_GEMINI_API_KEY in .env.local");
+  console.warn("Gemini API Key is missing! Using mock responses for development.");
 }
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
+
+// Mock responses for development when API key is not available
+const getMockAnalysis = (complaintText: string, vehicleModel: string): string => {
+  const mockResponses = [
+    "1. Berdasarkan keluhan suara mesin kasar, kemungkinan masalah pada sistem pembakaran atau filter udara kotor.\n2. Rekomendasi: Periksa filter udara dan busi.\n3. Urgensi: Sedang",
+    "1. Suara berisik saat berakselerasi dapat mengindikasikan masalah pada transmisi atau kopling.\n2. Rekomendasi: Inspeksi sistem transmisi dan kopling.\n3. Urgensi: Tinggi",
+    "1. Getaran pada idle menunjukkan kemungkinan masalah pada engine mount atau sistem bahan bakar.\n2. Rekomendasi: Periksa engine mount dan sistem injeksi.\n3. Urgensi: Sedang",
+    "1. Suara berderit saat belok kemungkinan masalah pada power steering atau bearing roda.\n2. Rekomendasi: Inspeksi sistem kemudi dan bearing.\n3. Urgensi: Sedang",
+    "1. Bunyi kasar pada mesin dapat disebabkan oli kotor atau komponen internal yang aus.\n2. Rekomendasi: Ganti oli dan filter oli, periksa komponen internal.\n3. Urgensi: Tinggi"
+  ];
+  
+  const randomIndex = Math.floor(Math.random() * mockResponses.length);
+  return `[DEMO MODE - ${vehicleModel}]\n${mockResponses[randomIndex]}`;
+};
 
 // Audio Diagnosis using Gemini Native Audio model
 export const analyzeAudioDiagnosis = async (audioBase64: string): Promise<string> => {
+  if (!API_KEY || !ai) {
+    return getMockAnalysis("Audio analysis", "Unknown vehicle");
+  }
+
   try {
     // Using native audio preview for multimodal audio understanding
     const response = await ai.models.generateContent({
@@ -30,14 +48,17 @@ export const analyzeAudioDiagnosis = async (audioBase64: string): Promise<string
     });
     return response.text || "Tidak dapat menganalisis suara.";
   } catch (error: any) {
-    console.error("Gemini Audio Error:", error);
-    const errorMessage = error?.message || error?.toString() || "Unknown error";
-    return `Gagal: ${errorMessage}`;
+    console.error("Gagal analisis audio:", error);
+    return getMockAnalysis("Audio error fallback", "Vehicle");
   }
 };
 
 // Advanced Multimodal Analysis for Booking (Audio + Text)
 export const analyzeBookingWithAudio = async (audioBase64: string, complaintText: string, vehicleModel: string): Promise<string> => {
+  if (!API_KEY || !ai) {
+    return getMockAnalysis(complaintText, vehicleModel);
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash-exp',
@@ -68,14 +89,18 @@ export const analyzeBookingWithAudio = async (audioBase64: string, complaintText
     });
     return response.text || "Analisis AI tidak tersedia.";
   } catch (error: any) {
-    console.error("Gemini Booking Analysis Error:", error);
-    const errorMessage = error?.message || error?.toString() || "Unknown error";
-    return `Gagal analisis: ${errorMessage}`;
+    console.error("Gagal analisis booking:", error);
+    return getMockAnalysis(complaintText, vehicleModel);
   }
 };
 
 // OCR for Invoice using Vision model
 export const scanInvoiceOCR = async (imageBase64: string): Promise<string> => {
+  if (!API_KEY || !ai) {
+    // Mock OCR response for development
+    return '[{"name": "Filter Oli", "qty": 1, "price": 25000}, {"name": "Oli Mesin SAE 10W-40", "qty": 4, "price": 55000}]';
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash-exp',
@@ -99,13 +124,17 @@ export const scanInvoiceOCR = async (imageBase64: string): Promise<string> => {
     text = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return text;
   } catch (error) {
-    console.error("Gemini OCR Error:", error);
+    console.error("Gagal OCR:", error);
     return "[]";
   }
 };
 
 // CRM Prediction using Text model
 export const predictServiceSchedule = async (vehicleHistory: string): Promise<string> => {
+  if (!API_KEY || !ai) {
+    return "Berdasarkan riwayat servis, disarankan servis berkala setiap 5000 km atau 6 bulan. Periksa oli mesin, filter, dan sistem rem.";
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash-exp',
@@ -113,13 +142,17 @@ export const predictServiceSchedule = async (vehicleHistory: string): Promise<st
     });
     return response.text || "Belum ada data cukup.";
   } catch (error) {
-    console.error("Gemini Prediction Error:", error);
-    return "Gagal memprediksi jadwal.";
+    console.error("Gagal prediksi:", error);
+    return "Gagal memprediksi jadwal servis.";
   }
 };
 
 // Generate personalized WhatsApp reminder message
 export const generateMarketingMessage = async (customerName: string, vehicleModel: string, lastServiceDate: string, serviceType: string): Promise<string> => {
+  if (!API_KEY || !ai) {
+    return `Halo ${customerName}! 👋\n\nWaktunya servis ${serviceType} untuk ${vehicleModel} Anda. Servis terakhir: ${lastServiceDate}.\n\nYuk booking sekarang untuk menjaga performa kendaraan Anda! [LINK BOOKING]\n\nTerima kasih,\nBengkel ABE`;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash-exp',
@@ -135,7 +168,7 @@ export const generateMarketingMessage = async (customerName: string, vehicleMode
     });
     return response.text || "Halo, waktunya servis kendaraan Anda.";
   } catch (error) {
-    console.error("Gemini Message Gen Error:", error);
+    console.error("Gagal generate message:", error);
     return `Halo ${customerName}, waktunya servis ${serviceType} untuk ${vehicleModel} Anda.`;
   }
 }

@@ -1,28 +1,27 @@
-
 -- Users Table
 CREATE TABLE IF NOT EXISTS users (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  username TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL, -- In a real app, this should be hashed. For this migration, we'll keep as-is or migrate blindly.
-  role TEXT NOT NULL,
-  avatar TEXT,
-  specialization TEXT,
-  status TEXT DEFAULT 'ACTIVE',
-  performance_score NUMERIC,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID DEFAULT gen_random_uuid () PRIMARY KEY,
+    name TEXT NOT NULL,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL, -- In a real app, this should be hashed. For this migration, we'll keep as-is or migrate blindly.
+    role TEXT NOT NULL,
+    avatar TEXT,
+    specialization TEXT,
+    status TEXT DEFAULT 'ACTIVE',
+    performance_score NUMERIC,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Inventory Table
 CREATE TABLE IF NOT EXISTS inventory (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  stock INTEGER DEFAULT 0,
-  min_stock INTEGER DEFAULT 0,
-  price NUMERIC DEFAULT 0,
-  category TEXT,
-  unit TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID DEFAULT gen_random_uuid () PRIMARY KEY,
+    name TEXT NOT NULL,
+    stock INTEGER DEFAULT 0,
+    min_stock INTEGER DEFAULT 0,
+    price NUMERIC DEFAULT 0,
+    category TEXT,
+    unit TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Service Records Table
@@ -52,62 +51,112 @@ CREATE TABLE IF NOT EXISTS service_records (
 
 -- Bookings Table
 CREATE TABLE IF NOT EXISTS bookings (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  booking_code TEXT UNIQUE NOT NULL,
-  customer_name TEXT NOT NULL,
-  phone TEXT,
-  license_plate TEXT,
-  vehicle_model TEXT,
-  booking_date DATE,
-  booking_time TIME,
-  complaint TEXT,
-  audio_base64 TEXT, -- Warning: Storing large base64 strings in DB is not ideal, but simplest for 1:1 migration. Prefer Storage buckets.
-  ai_analysis TEXT,
-  status TEXT DEFAULT 'PENDING_REVIEW',
-  mechanic_id UUID REFERENCES users(id),
-  created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID DEFAULT gen_random_uuid () PRIMARY KEY,
+    booking_code TEXT UNIQUE NOT NULL,
+    customer_name TEXT NOT NULL,
+    phone TEXT,
+    license_plate TEXT,
+    vehicle_model TEXT,
+    booking_date DATE,
+    booking_time TIME,
+    complaint TEXT,
+    audio_base64 TEXT, -- Warning: Storing large base64 strings in DB is not ideal, but simplest for 1:1 migration. Prefer Storage buckets.
+    ai_analysis TEXT,
+    status TEXT DEFAULT 'PENDING_REVIEW',
+    mechanic_id UUID REFERENCES users (id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Service Reminders Table
 CREATE TABLE IF NOT EXISTS reminders (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  customer_name TEXT NOT NULL,
-  phone TEXT,
-  license_plate TEXT,
-  vehicle_model TEXT,
-  last_service_date TIMESTAMPTZ,
-  next_service_date TIMESTAMPTZ,
-  service_type TEXT,
-  status TEXT DEFAULT 'PENDING',
-  message_template TEXT,
-  sent_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+    id UUID DEFAULT gen_random_uuid () PRIMARY KEY,
+    customer_name TEXT NOT NULL,
+    phone TEXT,
+    license_plate TEXT,
+    vehicle_model TEXT,
+    last_service_date TIMESTAMPTZ,
+    next_service_date TIMESTAMPTZ,
+    service_type TEXT,
+    status TEXT DEFAULT 'PENDING',
+    message_template TEXT,
+    sent_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Enable Row Level Security (RLS) - Optional for now, but good practice
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE service_records ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE reminders ENABLE ROW LEVEL SECURITY;
 
 -- Create Policies (Public Access for now to match current behavior, strictly need auth later)
-CREATE POLICY "Public Read Users" ON users FOR SELECT USING (true);
-CREATE POLICY "Public Update Users" ON users FOR UPDATE USING (true);
-CREATE POLICY "Public Insert Users" ON users FOR INSERT WITH CHECK (true);
-CREATE POLICY "Public Delete Users" ON users FOR DELETE USING (true);
+-- Conditional Policy Creation
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Users' AND tablename = 'users') THEN
+    CREATE POLICY "Public Read Users" ON users FOR SELECT USING (true);
+  END IF;
 
-CREATE POLICY "Public Read Inventory" ON inventory FOR SELECT USING (true);
-CREATE POLICY "Public Write Inventory" ON inventory FOR ALL USING (true);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Update Users' AND tablename = 'users') THEN
+    CREATE POLICY "Public Update Users" ON users FOR UPDATE USING (true);
+  END IF;
 
-CREATE POLICY "Public Read ServiceRecords" ON service_records FOR SELECT USING (true);
-CREATE POLICY "Public Write ServiceRecords" ON service_records FOR ALL USING (true);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Insert Users' AND tablename = 'users') THEN
+    CREATE POLICY "Public Insert Users" ON users FOR INSERT WITH CHECK (true);
+  END IF;
 
-CREATE POLICY "Public Read Bookings" ON bookings FOR SELECT USING (true);
-CREATE POLICY "Public Write Bookings" ON bookings FOR ALL USING (true);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Delete Users' AND tablename = 'users') THEN
+    CREATE POLICY "Public Delete Users" ON users FOR DELETE USING (true);
+  END IF;
 
-CREATE POLICY "Public Read Reminders" ON reminders FOR SELECT USING (true);
-CREATE POLICY "Public Write Reminders" ON reminders FOR ALL USING (true);
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Inventory' AND tablename = 'inventory') THEN
+    CREATE POLICY "Public Read Inventory" ON inventory FOR SELECT USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Write Inventory' AND tablename = 'inventory') THEN
+    CREATE POLICY "Public Write Inventory" ON inventory FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read ServiceRecords' AND tablename = 'service_records') THEN
+    CREATE POLICY "Public Read ServiceRecords" ON service_records FOR SELECT USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Write ServiceRecords' AND tablename = 'service_records') THEN
+    CREATE POLICY "Public Write ServiceRecords" ON service_records FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Bookings' AND tablename = 'bookings') THEN
+    CREATE POLICY "Public Read Bookings" ON bookings FOR SELECT USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Write Bookings' AND tablename = 'bookings') THEN
+    CREATE POLICY "Public Write Bookings" ON bookings FOR ALL USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Read Reminders' AND tablename = 'reminders') THEN
+    CREATE POLICY "Public Read Reminders" ON reminders FOR SELECT USING (true);
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Public Write Reminders' AND tablename = 'reminders') THEN
+    CREATE POLICY "Public Write Reminders" ON reminders FOR ALL USING (true);
+  END IF;
+END $$;
+
+-- Pastikan kolom 'performance_score' ada di tabel 'users'
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'users' AND column_name = 'performance_score'
+  ) THEN
+    ALTER TABLE users ADD COLUMN performance_score NUMERIC;
+  END IF;
+END $$;
 
 -- RPC Function to execute arbitrary SQL (Only for OWNER)
 -- WARNING: This allows full database access. Use with caution.

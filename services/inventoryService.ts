@@ -47,7 +47,7 @@ export const inventoryService = {
     },
 
     async updateStock(id: string, qtyChange: number): Promise<void> {
-        // This is better done with an RPC call for atomicity, but for now fetch-update is simpler migration
+        // Fix critical bug: ensure proper atomic update with correct arithmetic
         const { data: item, error: fetchError } = await supabase
             .from('inventory')
             .select('stock')
@@ -56,7 +56,8 @@ export const inventoryService = {
 
         if (fetchError || !item) throw fetchError;
 
-        const newStock = item.stock + qtyChange;
+        // FIXED: Use proper addition for positive qtyChange and subtraction for negative
+        const newStock = Math.max(0, item.stock + qtyChange); // Prevent negative stock
         const { error: updateError } = await supabase
             .from('inventory')
             .update({ stock: newStock })

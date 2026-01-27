@@ -20,14 +20,20 @@ export const serviceRecordService = {
     },
 
     async getHistory(): Promise<ServiceRecord[]> {
+        console.log('Fetching service history...');
         const { data, error } = await supabase
             .from('service_records')
             .select('*')
             .in('status', [QueueStatus.FINISHED, QueueStatus.PAID, QueueStatus.VOID, QueueStatus.CANCELLED])
             .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        return data.map(mapToServiceRecord);
+        if (error) {
+            console.error('Service history query error:', error);
+            throw error;
+        }
+        
+        console.log(`Found ${data?.length || 0} history records`);
+        return (data || []).map(mapToServiceRecord);
     },
 
     async create(record: Partial<ServiceRecord>): Promise<ServiceRecord> {

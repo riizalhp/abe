@@ -1,5 +1,4 @@
 import React from 'react';
-import { Bot, Wrench, Search, CalendarClock, Cpu, Gauge, MessageSquare } from 'lucide-react';
 
 interface LandingPageProps {
     onLoginClick: () => void;
@@ -9,110 +8,248 @@ interface LandingPageProps {
 
 const LandingPage: React.FC<LandingPageProps> = ({ onLoginClick, onGuestBooking, onGuestTracking }) => {
     return (
-        <div className="min-h-screen bg-white font-sans">
-            {/* Navigation - Glassmorphism */}
-            <nav className="fixed w-full bg-slate-900/90 backdrop-blur-md z-50 border-b border-white/10">
+        <div className="min-h-screen bg-white font-display">
+            {/* Navigation */}
+            <nav className="fixed w-full bg-white/95 backdrop-blur-md z-50 border-b border-gray-100 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-20">
+                    <div className="flex justify-between items-center h-16">
                         <div className="flex items-center gap-3">
-                            <div className="bg-blue-600 p-2 rounded-lg shadow-glow">
-                                <Wrench className="h-6 w-6 text-white" />
+                            <div className="p-2 bg-primary rounded-lg">
+                                <span className="material-symbols-outlined text-white text-xl">build</span>
                             </div>
-                            <span className="font-bold text-2xl text-white tracking-tight">ABE<span className="text-blue-500">.AUTO</span></span>
+                            <div>
+                                <span className="font-bold text-xl text-gray-900">Bengkel Kang Acep</span>
+                                <div className="text-xs text-gray-500">Spesialis Motor & Mobil</div>
+                            </div>
                         </div>
                         <div className="flex items-center space-x-6">
                             <button
                                 onClick={onGuestTracking}
-                                className="text-slate-300 hover:text-white font-medium text-sm hidden md:block transition-colors"
+                                className="text-gray-600 hover:text-gray-900 font-medium text-sm transition-colors flex items-center gap-1"
                             >
-                                Track Order
+                                <span className="material-symbols-outlined text-sm">search</span>
+                                Lacak Servis
                             </button>
                             <button
                                 onClick={onLoginClick}
-                                className="bg-white/10 text-white border border-white/20 px-6 py-2.5 rounded-full hover:bg-white hover:text-slate-900 transition-all font-medium text-sm"
+                                className="bg-primary text-white px-4 py-2 rounded-lg hover:bg-primary/90 transition-colors font-medium text-sm"
                             >
-                                Staff Access
+                                Akses Staff
                             </button>
                         </div>
                     </div>
                 </div>
             </nav>
 
-            {/* Hero Section - Dark Automotive Theme */}
-            <div className="relative pt-32 pb-20 sm:pt-48 sm:pb-32 overflow-hidden bg-slate-900 text-white">
-                {/* Abstract Background */}
-                <div className="absolute inset-0 overflow-hidden">
-                    <div className="absolute -top-[30%] -right-[10%] w-[70%] h-[70%] bg-blue-600/20 rounded-full blur-[120px]" />
-                    <div className="absolute top-[20%] left-[-10%] w-[40%] h-[40%] bg-indigo-600/10 rounded-full blur-[100px]" />
-                    <div className="absolute bottom-0 w-full h-px bg-gradient-to-r from-transparent via-slate-700 to-transparent"></div>
-                </div>
-
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 z-10">
-                    <div className="lg:w-2/3">
-                        <div className="inline-flex items-center px-3 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-400 text-xs font-semibold tracking-wide uppercase mb-6">
-                            <Bot className="w-3 h-3 mr-2" /> Powered by Gemini 2.0 AI
-                        </div>
-                        <h1 className="text-5xl sm:text-7xl font-bold tracking-tight mb-8 leading-tight">
-                            Future of <br />
-                            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400">Automotive Care</span>
+            {/* Hero Section */}
+            <div className="relative pt-20 pb-16 sm:pt-24 sm:pb-20 bg-gradient-to-br from-blue-50 to-indigo-100">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="text-center">
+                        <h1 className="text-4xl sm:text-6xl font-bold text-gray-900 mb-6">
+                            Bengkel Terpercaya <br />
+                            <span className="text-primary">Sejak 1995</span>
                         </h1>
-                        <p className="mt-4 max-w-xl text-lg text-slate-400 mb-10 leading-relaxed">
-                            Experience the next generation of workshop management.
-                            Real-time diagnostics, audio analysis engine, and predictive maintenance in one seamless platform.
+                        <p className="max-w-2xl mx-auto text-lg text-gray-600 mb-10">
+                            Melayani perbaikan dan perawatan kendaraan dengan teknisi berpengalaman. 
+                            Spesialis motor dan mobil dengan harga terjangkau dan pelayanan terbaik.
                         </p>
-                        <div className="flex flex-col sm:flex-row gap-4">
+                        
+                        {/* Contact Info Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10 max-w-4xl mx-auto">
+                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                                <div className="flex items-center justify-center gap-2 text-gray-700">
+                                    <span className="material-symbols-outlined text-primary">schedule</span>
+                                    <div className="text-left">
+                                        <div className="font-semibold text-sm">Buka Setiap Hari</div>
+                                        <div className="text-xs text-gray-500">08:00 - 17:00 WIB</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                                <div className="flex items-center justify-center gap-2 text-gray-700">
+                                    <span className="material-symbols-outlined text-primary">location_on</span>
+                                    <div className="text-left">
+                                        <div className="font-semibold text-sm">Jl. Raya Bogor</div>
+                                        <div className="text-xs text-gray-500">Depan SPBU Citeureup</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+                                <div className="flex items-center justify-center gap-2 text-gray-700">
+                                    <span className="material-symbols-outlined text-primary">phone</span>
+                                    <div className="text-left">
+                                        <div className="font-semibold text-sm">0812-3456-7890</div>
+                                        <div className="text-xs text-gray-500">WhatsApp Ready</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             <button
                                 onClick={onGuestBooking}
-                                className="px-8 py-4 bg-blue-600 text-white rounded-xl font-bold text-lg hover:bg-blue-500 shadow-lg shadow-blue-900/50 flex items-center justify-center transition-all hover:scale-[1.02]"
+                                className="px-8 py-4 bg-primary text-white rounded-lg font-semibold text-lg hover:bg-primary/90 shadow-sm flex items-center justify-center transition-all hover:scale-105"
                             >
-                                <CalendarClock className="mr-2 h-5 w-5" /> Book Service
+                                Booking Sekarang
                             </button>
                             <button
                                 onClick={onGuestTracking}
-                                className="px-8 py-4 bg-slate-800 text-white border border-slate-700 rounded-xl font-bold text-lg hover:bg-slate-700 flex items-center justify-center transition-all"
+                                className="px-8 py-4 bg-white text-gray-900 border-2 border-gray-300 rounded-lg font-semibold text-lg hover:border-primary hover:text-primary flex items-center justify-center transition-all"
                             >
-                                <Search className="mr-2 h-5 w-5" /> Check Status
+                                <span className="material-symbols-outlined mr-2">search</span>
+                                Cek Status Servis
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Features Grid - Minimalist Cards */}
-            <div className="py-24 bg-slate-50">
+            {/* Services Section */}
+            <div className="py-16 bg-white">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center mb-16">
-                        <h2 className="text-3xl font-bold text-slate-900">Precision Engineering</h2>
-                        <p className="text-slate-500 mt-2">Designed for modern workshops</p>
+                    <div className="text-center mb-12">
+                        <h2 className="text-3xl font-bold text-gray-900 mb-4">Layanan Unggulan</h2>
+                        <p className="text-gray-600">Dengan teknisi berpengalaman dan peralatan modern</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {[
-                            { icon: Cpu, title: 'AI Diagnostics', desc: 'Acoustic analysis engine detects engine faults from audio recordings.', color: 'text-blue-600', bg: 'bg-blue-50' },
-                            { icon: Gauge, title: 'Real-time Metrics', desc: 'Live operational dashboard tracking revenue, queue, and inventory.', color: 'text-indigo-600', bg: 'bg-indigo-50' },
-                            { icon: MessageSquare, title: 'Smart CRM', desc: 'Automated WhatsApp reminders based on predictive service intervals.', color: 'text-teal-600', bg: 'bg-teal-50' },
-                        ].map((feature, idx) => (
-                            <div key={idx} className="group p-8 rounded-2xl bg-white border border-slate-200 hover:border-blue-200 hover:shadow-xl hover:shadow-blue-900/5 transition-all duration-300">
-                                <div className={`w-14 h-14 ${feature.bg} rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
-                                    <feature.icon className={`h-7 w-7 ${feature.color}`} />
+                            { 
+                                icon: 'build', 
+                                title: 'Service Berkala', 
+                                desc: 'Ganti oli, tune up, dan perawatan rutin motor & mobil',
+                                price: 'Mulai 50rb'
+                            },
+                            { 
+                                icon: 'tire_repair', 
+                                title: 'Reparasi Ban', 
+                                desc: 'Tambal ban, ganti ban baru, balancing dan spooring',
+                                price: 'Mulai 15rb'
+                            },
+                            { 
+                                icon: 'electrical_services', 
+                                title: 'Kelistrikan', 
+                                desc: 'Perbaikan aki, alternator, starter, dan sistem kelistrikan',
+                                price: 'Mulai 25rb'
+                            },
+                            { 
+                                icon: 'car_crash', 
+                                title: 'Body Repair', 
+                                desc: 'Perbaikan body, cat ulang, dan restorasi kendaraan',
+                                price: 'Konsultasi'
+                            }
+                        ].map((service, idx) => (
+                            <div key={idx} className="group p-6 rounded-lg bg-gray-50 border border-gray-200 hover:border-primary hover:bg-primary/5 transition-all duration-300">
+                                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-primary group-hover:scale-110 transition-all">
+                                    <span className={`material-symbols-outlined text-xl group-hover:text-white ${idx === 0 ? 'text-primary' : idx === 1 ? 'text-orange-600' : idx === 2 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                        {service.icon}
+                                    </span>
                                 </div>
-                                <h3 className="text-xl font-bold text-slate-900 mb-3">{feature.title}</h3>
-                                <p className="text-slate-500 leading-relaxed">
-                                    {feature.desc}
-                                </p>
+                                <h3 className="text-lg font-bold text-gray-900 mb-2">{service.title}</h3>
+                                <p className="text-gray-600 text-sm mb-3 leading-relaxed">{service.desc}</p>
+                                <div className="text-primary font-semibold text-sm">{service.price}</div>
                             </div>
                         ))}
                     </div>
                 </div>
             </div>
 
-            {/* Footer */}
-            <footer className="bg-slate-900 text-slate-400 py-12 border-t border-slate-800">
-                <div className="max-w-7xl mx-auto px-4 flex flex-col items-center">
-                    <div className="flex items-center mb-6 opacity-50 grayscale hover:grayscale-0 transition-all">
-                        <Wrench className="h-6 w-6 mr-2" />
-                        <span className="text-xl font-bold">ABE.AUTO</span>
+            {/* Testimonial Section */}
+            <div className="py-16 bg-gray-50">
+                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                    <h2 className="text-3xl font-bold text-gray-900 mb-8">Kata Pelanggan</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                            <div className="flex items-center mb-4">
+                                {[...Array(5)].map((_, i) => (
+                                    <span key={i} className="material-symbols-outlined text-yellow-400 text-sm">star</span>
+                                ))}
+                            </div>
+                            <p className="text-gray-600 mb-4 italic">
+                                "Pelayanan ramah, harga terjangkau. Motor saya yang macet langsung normal setelah dibawa ke sini. Terima kasih Kang Acep!"
+                            </p>
+                            <div className="text-sm">
+                                <div className="font-semibold text-gray-900">Budi Santoso</div>
+                                <div className="text-gray-500">Pelanggan sejak 2018</div>
+                            </div>
+                        </div>
+                        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                            <div className="flex items-center mb-4">
+                                {[...Array(5)].map((_, i) => (
+                                    <span key={i} className="material-symbols-outlined text-yellow-400 text-sm">star</span>
+                                ))}
+                            </div>
+                            <p className="text-gray-600 mb-4 italic">
+                                "Bengkel langganan keluarga. Teknisinya jujur dan tidak ada biaya tersembunyi. Rekomendasi banget!"
+                            </p>
+                            <div className="text-sm">
+                                <div className="font-semibold text-gray-900">Siti Rahayu</div>
+                                <div className="text-gray-500">Pelanggan sejak 2020</div>
+                            </div>
+                        </div>
                     </div>
-                    <p className="text-sm opacity-50">© 2025 ABE System. Built for speed.</p>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <footer className="bg-gray-900 text-gray-300 py-12">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                        <div className="col-span-1 md:col-span-2">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-primary rounded-lg">
+                                    <span className="material-symbols-outlined text-white">build</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-white">Bengkel Kang Acep</h3>
+                                    <p className="text-sm text-gray-400">Spesialis Motor & Mobil</p>
+                                </div>
+                            </div>
+                            <p className="text-gray-400 mb-4">
+                                Melayani perbaikan dan perawatan kendaraan sejak 1995 dengan teknisi berpengalaman 
+                                dan harga terjangkau. Kepuasan pelanggan adalah prioritas utama kami.
+                            </p>
+                            <div className="flex gap-4">
+                                <a href="#" className="bg-green-600 text-white p-2 rounded-lg hover:bg-green-700 transition-colors">
+                                    <span className="material-symbols-outlined">message</span>
+                                </a>
+                                <a href="#" className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors">
+                                    <span className="material-symbols-outlined">call</span>
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h4 className="font-semibold text-white mb-4">Layanan</h4>
+                            <ul className="space-y-2 text-sm">
+                                <li><a href="#" className="hover:text-white transition-colors">Service Berkala</a></li>
+                                <li><a href="#" className="hover:text-white transition-colors">Reparasi Ban</a></li>
+                                <li><a href="#" className="hover:text-white transition-colors">Kelistrikan</a></li>
+                                <li><a href="#" className="hover:text-white transition-colors">Body Repair</a></li>
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h4 className="font-semibold text-white mb-4">Kontak</h4>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary text-sm">location_on</span>
+                                    <span>Jl. Raya Bogor, Depan SPBU Citeureup</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary text-sm">phone</span>
+                                    <span>0812-3456-7890</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="material-symbols-outlined text-primary text-sm">schedule</span>
+                                    <span>08:00 - 17:00 WIB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="border-t border-gray-800 mt-8 pt-8 text-center text-sm text-gray-400">
+                        <p>© 2026 Bengkel Kang Acep. Melayani dengan sepenuh hati.</p>
+                    </div>
                 </div>
             </footer>
         </div>
