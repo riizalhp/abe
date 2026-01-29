@@ -1,5 +1,5 @@
+import { supabase } from '../lib/supabase';
 import { SecurityUtils } from '../lib/security';
-import { PerformanceUtils } from '../lib/performance';
 
 export interface QRISData {
   id?: string;
@@ -20,6 +20,7 @@ export interface DynamicQRISPayment {
 class QRISService {
   private static instance: QRISService;
   private readonly STORAGE_KEY = 'qris_settings';
+  private readonly TABLE_NAME = 'qris_settings';
 
   static getInstance(): QRISService {
     if (!QRISService.instance) {
@@ -52,17 +53,14 @@ class QRISService {
   // Parse merchant name from QRIS string (Tag 59)
   private parseMerchantName(qrisString: string): string {
     try {
-      // Look for tag 59 (merchant name)
       const tag59Index = qrisString.indexOf('59');
       if (tag59Index === -1) return 'Unknown Merchant';
       
-      // Get length (2 digits after '59')
       const lengthStr = qrisString.substring(tag59Index + 2, tag59Index + 4);
       const length = parseInt(lengthStr, 10);
       
       if (isNaN(length)) return 'Unknown Merchant';
       
-      // Extract merchant name
       const merchantName = qrisString.substring(tag59Index + 4, tag59Index + 4 + length);
       return merchantName || 'Unknown Merchant';
     } catch (error) {
@@ -78,40 +76,29 @@ class QRISService {
     feeValue?: number
   ): string {
     try {
-      // Step 1: Remove old CRC (last 4 characters)
       const qrisWithoutCrc = staticQris.substring(0, staticQris.length - 4);
-      
-      // Step 2: Change static indicator (010211) to dynamic (010212)
       const step1 = qrisWithoutCrc.replace('010211', '010212');
-      
-      // Step 3: Split by country code "5802ID"
       const parts = step1.split('5802ID');
+      
       if (parts.length !== 2) {
         throw new Error('Invalid QRIS format - country code not found');
       }
       
-      // Step 4: Create amount tag (Tag 54)
       const amountStr = Math.round(amount).toString();
       const amountTag = '54' + String(amountStr.length).padStart(2, '0') + amountStr;
       
-      // Step 5: Create fee tag (optional)
       let feeTag = '';
       if (feeValue && feeValue > 0) {
         if (feeType === 'Rupiah') {
-          // Fixed fee: 55020256 + length + value
           const feeValueStr = Math.round(feeValue).toString();
           feeTag = '55020256' + String(feeValueStr.length).padStart(2, '0') + feeValueStr;
         } else if (feeType === 'Persentase') {
-          // Percentage fee: 55020357 + length + value
           const feeValueStr = feeValue.toString();
           feeTag = '55020357' + String(feeValueStr.length).padStart(2, '0') + feeValueStr;
         }
       }
       
-      // Step 6: Combine all parts
       const payload = parts[0] + amountTag + feeTag + '5802ID' + parts[1];
-      
-      // Step 7: Calculate new CRC and append
       const finalCrc = this.crc16(payload);
       
       return payload + finalCrc;
@@ -120,16 +107,175 @@ class QRISService {
     }
   }
 
-  // Save QRIS data to localStorage with encryption and validation
-  saveQRISData(qrisData: Omit<QRISData, 'id' | 'createdAt'>): QRISData {
-    // Rate limiting check
+  // ============================================
+  // SUPABASE OPERATIONS (Primary)
+  // ============================================
+
+  // Save QRIS data to Supabase
+  async saveQRISData(qrisData: Omit<QRISData, 'id' | 'createdAt'>): Promise<QRISData> {
     if (!SecurityUtils.checkRateLimit('qris_save', 5, 60000)) {
       throw new Error('Too many save attempts. Please wait.');
     }
 
-    const existingData = this.getAllQRISData();
+    try {
+      // If setting as default, remove default from others
+      if (qrisData.isDefault) {
+        await supabase
+          .from(this.TABLE_NAME)
+          .update({ is_default: false })
+          .eq('is_default', true);
+      }
+
+      const { data, error } = await supabase
+        .from(this.TABLE_NAME)
+        .insert({
+          merchant_name: SecurityUtils.sanitizeInput(qrisData.merchantName),
+          qris_string: qrisData.qrisString, // Don't sanitize QRIS string as it may break the format
+          is_default: qrisData.isDefault
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.warn('Supabase save failed, falling back to localStorage:', error);
+        return this.saveQRISDataLocal(qrisData);
+      }
+
+      const result: QRISData = {
+        id: data.id,
+        merchantName: data.merchant_name,
+        qrisString: data.qris_string,
+        isDefault: data.is_default,
+        createdAt: new Date(data.created_at)
+      };
+
+      // Also save to localStorage as backup
+      this.syncToLocalStorage();
+      
+      return result;
+    } catch (error) {
+      console.warn('Supabase error, falling back to localStorage:', error);
+      return this.saveQRISDataLocal(qrisData);
+    }
+  }
+
+  // Get all QRIS data from Supabase
+  async getAllQRISData(): Promise<QRISData[]> {
+    try {
+      const { data, error } = await supabase
+        .from(this.TABLE_NAME)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) {
+        console.warn('Supabase fetch failed, using localStorage:', error);
+        return this.getAllQRISDataLocal();
+      }
+
+      if (!data || data.length === 0) {
+        // Try localStorage as fallback
+        return this.getAllQRISDataLocal();
+      }
+
+      return data.map((item: any) => ({
+        id: item.id,
+        merchantName: item.merchant_name,
+        qrisString: item.qris_string,
+        isDefault: item.is_default,
+        createdAt: new Date(item.created_at)
+      }));
+    } catch (error) {
+      console.warn('Supabase error, using localStorage:', error);
+      return this.getAllQRISDataLocal();
+    }
+  }
+
+  // Get default QRIS from Supabase
+  async getDefaultQRIS(): Promise<QRISData | null> {
+    try {
+      const { data, error } = await supabase
+        .from(this.TABLE_NAME)
+        .select('*')
+        .eq('is_default', true)
+        .single();
+
+      if (error || !data) {
+        // Fallback to localStorage
+        return this.getDefaultQRISLocal();
+      }
+
+      return {
+        id: data.id,
+        merchantName: data.merchant_name,
+        qrisString: data.qris_string,
+        isDefault: data.is_default,
+        createdAt: new Date(data.created_at)
+      };
+    } catch (error) {
+      return this.getDefaultQRISLocal();
+    }
+  }
+
+  // Update QRIS data in Supabase
+  async updateQRISData(id: string, updates: Partial<QRISData>): Promise<void> {
+    try {
+      if (updates.isDefault) {
+        await supabase
+          .from(this.TABLE_NAME)
+          .update({ is_default: false })
+          .eq('is_default', true);
+      }
+
+      const updateData: any = {};
+      if (updates.merchantName !== undefined) updateData.merchant_name = SecurityUtils.sanitizeInput(updates.merchantName);
+      if (updates.qrisString !== undefined) updateData.qris_string = updates.qrisString;
+      if (updates.isDefault !== undefined) updateData.is_default = updates.isDefault;
+
+      const { error } = await supabase
+        .from(this.TABLE_NAME)
+        .update(updateData)
+        .eq('id', id);
+
+      if (error) {
+        console.warn('Supabase update failed, updating localStorage:', error);
+        this.updateQRISDataLocal(id, updates);
+      }
+
+      this.syncToLocalStorage();
+    } catch (error) {
+      console.warn('Supabase error, updating localStorage:', error);
+      this.updateQRISDataLocal(id, updates);
+    }
+  }
+
+  // Delete QRIS data from Supabase
+  async deleteQRISData(id: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from(this.TABLE_NAME)
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.warn('Supabase delete failed, deleting from localStorage:', error);
+        this.deleteQRISDataLocal(id);
+      }
+
+      this.syncToLocalStorage();
+    } catch (error) {
+      console.warn('Supabase error, deleting from localStorage:', error);
+      this.deleteQRISDataLocal(id);
+    }
+  }
+
+  // ============================================
+  // LOCALSTORAGE OPERATIONS (Fallback)
+  // ============================================
+
+  private saveQRISDataLocal(qrisData: Omit<QRISData, 'id' | 'createdAt'>): QRISData {
+    const existingData = this.getAllQRISDataLocal();
     
-    // If setting as default, remove default from others
     if (qrisData.isDefault) {
       existingData.forEach(data => {
         data.isDefault = false;
@@ -139,22 +285,18 @@ class QRISService {
     const newData: QRISData = {
       id: SecurityUtils.generateSecureId(),
       merchantName: SecurityUtils.sanitizeInput(qrisData.merchantName),
-      qrisString: SecurityUtils.sanitizeInput(qrisData.qrisString),
+      qrisString: qrisData.qrisString,
       isDefault: qrisData.isDefault,
       createdAt: new Date()
     };
     
-    const updatedData = [newData, ...existingData];
+    const updatedData = [newData, ...existingData].slice(0, 10);
+    SecurityUtils.setSecureItem(this.STORAGE_KEY, updatedData);
     
-    // Keep only last 10 QRIS
-    const limitedData = updatedData.slice(0, 10);
-    
-    SecurityUtils.setSecureItem(this.STORAGE_KEY, limitedData);
     return newData;
   }
 
-  // Get all QRIS data from localStorage with decryption
-  getAllQRISData(): QRISData[] {
+  private getAllQRISDataLocal(): QRISData[] {
     try {
       const data = SecurityUtils.getSecureItem(this.STORAGE_KEY);
       if (!data || !Array.isArray(data)) return [];
@@ -168,20 +310,17 @@ class QRISService {
     }
   }
 
-  // Get default QRIS
-  getDefaultQRIS(): QRISData | null {
-    const allData = this.getAllQRISData();
+  private getDefaultQRISLocal(): QRISData | null {
+    const allData = this.getAllQRISDataLocal();
     return allData.find(data => data.isDefault) || null;
   }
 
-  // Update QRIS data
-  updateQRISData(id: string, updates: Partial<QRISData>): void {
-    const allData = this.getAllQRISData();
+  private updateQRISDataLocal(id: string, updates: Partial<QRISData>): void {
+    const allData = this.getAllQRISDataLocal();
     const index = allData.findIndex(data => data.id === id);
     
     if (index === -1) return;
     
-    // If setting as default, remove default from others
     if (updates.isDefault) {
       allData.forEach(data => {
         data.isDefault = false;
@@ -189,27 +328,49 @@ class QRISService {
     }
     
     allData[index] = { ...allData[index], ...updates };
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(allData));
+    SecurityUtils.setSecureItem(this.STORAGE_KEY, allData);
   }
 
-  // Delete QRIS data
-  deleteQRISData(id: string): void {
-    const allData = this.getAllQRISData();
+  private deleteQRISDataLocal(id: string): void {
+    const allData = this.getAllQRISDataLocal();
     const filteredData = allData.filter(data => data.id !== id);
-    localStorage.setItem(this.STORAGE_KEY, JSON.stringify(filteredData));
+    SecurityUtils.setSecureItem(this.STORAGE_KEY, filteredData);
   }
 
-  // Validate QRIS string
+  // Sync Supabase data to localStorage for offline access
+  private async syncToLocalStorage(): Promise<void> {
+    try {
+      const { data } = await supabase
+        .from(this.TABLE_NAME)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (data && data.length > 0) {
+        const qrisData = data.map((item: any) => ({
+          id: item.id,
+          merchantName: item.merchant_name,
+          qrisString: item.qris_string,
+          isDefault: item.is_default,
+          createdAt: item.created_at
+        }));
+        SecurityUtils.setSecureItem(this.STORAGE_KEY, qrisData);
+      }
+    } catch (error) {
+      console.warn('Failed to sync to localStorage:', error);
+    }
+  }
+
+  // ============================================
+  // VALIDATION & UTILITIES
+  // ============================================
+
   validateQRIS(qrisString: string): boolean {
     try {
-      // Basic validation
       if (!qrisString || qrisString.length < 50) return false;
-      
-      // Check if contains required QRIS elements
       if (!qrisString.includes('00020101')) return false;
       if (!qrisString.includes('5802ID')) return false;
       
-      // Validate CRC
       const payload = qrisString.substring(0, qrisString.length - 4);
       const providedCrc = qrisString.substring(qrisString.length - 4);
       const calculatedCrc = this.crc16(payload);
@@ -220,21 +381,17 @@ class QRISService {
     }
   }
 
-  // Get merchant name from QRIS string
   getMerchantName(qrisString: string): string {
     return this.parseMerchantName(qrisString);
   }
 
-  // Get default payment amount
   getDefaultAmount(): number {
-    const savedAmount = localStorage.getItem('qris_default_amount');
-    return savedAmount ? parseInt(savedAmount, 10) : 0; // Default to 0 if cleared
+    const savedAmount = SecurityUtils.getSecureItem('qris_default_amount');
+    return savedAmount ? parseInt(savedAmount, 10) : 0;
   }
 
-  // Set default payment amount
-  // Save default amount with validation and encryption
   setDefaultAmount(amount: number): void {
-    if (amount < 0 || amount > 10000000) { // Max 10M
+    if (amount < 0 || amount > 10000000) {
       throw new Error('Invalid amount range');
     }
     SecurityUtils.setSecureItem('qris_default_amount', amount.toString());
