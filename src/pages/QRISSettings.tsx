@@ -15,9 +15,14 @@ export const QRISSettings: React.FC = () => {
     loadDefaultAmount();
   }, []);
 
-  const loadQRISData = () => {
-    const data = qrisService.getAllQRISData();
-    setQrisData(data);
+  const loadQRISData = async () => {
+    try {
+      const data = await qrisService.getAllQRISData();
+      setQrisData(data);
+    } catch (error) {
+      console.error('Failed to load QRIS data:', error);
+      setQrisData([]);
+    }
   };
 
   const loadDefaultAmount = () => {
@@ -59,14 +64,14 @@ export const QRISSettings: React.FC = () => {
       }
 
       // Save QRIS data
-      const newQrisData = qrisService.saveQRISData({
+      const newQrisData = await qrisService.saveQRISData({
         merchantName,
         qrisString: data,
         isDefault: qrisData.length === 0 // Set as default if it's the first one
       });
 
       setUploadSuccess(`QRIS for ${merchantName} has been saved successfully`);
-      loadQRISData();
+      await loadQRISData();
 
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Failed to save QRIS');
@@ -75,16 +80,16 @@ export const QRISSettings: React.FC = () => {
     }
   };
 
-  const handleSetDefault = (id: string) => {
-    qrisService.updateQRISData(id, { isDefault: true });
-    loadQRISData();
+  const handleSetDefault = async (id: string) => {
+    await qrisService.updateQRISData(id, { isDefault: true });
+    await loadQRISData();
     setUploadSuccess('Default QRIS updated successfully');
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this QRIS?')) {
-      qrisService.deleteQRISData(id);
-      loadQRISData();
+      await qrisService.deleteQRISData(id);
+      await loadQRISData();
       setUploadSuccess('QRIS deleted successfully');
     }
   };

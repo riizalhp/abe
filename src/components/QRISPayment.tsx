@@ -42,7 +42,7 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
 
     try {
       // Get default QRIS
-      const defaultQris = qrisService.getDefaultQRIS();
+      const defaultQris = await qrisService.getDefaultQRIS();
       
       if (!defaultQris) {
         throw new Error('No default QRIS found. Please configure QRIS in settings first.');
