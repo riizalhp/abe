@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 
 import { Role, User, ServiceRecord, QueueStatus, ServiceReminder, BookingRecord, BookingStatus, ServiceWeight } from './types';
+import { SecurityUtils } from './lib/security';
 import { userService } from './services/userService';
 import { serviceRecordService } from './services/serviceRecordService';
 import { bookingService } from './services/bookingService';
@@ -250,26 +251,18 @@ function App() {
         {/* Protected Routes */}
         <Route element={currentUser ? <MainLayout currentUser={currentUser} onLogout={handleLogout} /> : <Navigate to="/login" />}>
           <Route path="/dashboard" element={
-            <RouteLoader>
-              <LazyRoutes.Dashboard stats={dashboardStats} />
-            </RouteLoader>
+            <Dashboard stats={dashboardStats} />
           } />
           <Route path="/front-office" element={
-            <RouteLoader>
-              <LazyRoutes.FrontOffice onAddQueue={addQueue} />
-            </RouteLoader>
+            <FrontOffice onAddQueue={addQueue} />
           } />
           <Route path="/mechanic-workbench" element={
             <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.OPERATIONS}>
-              <RouteLoader>
-                <LazyRoutes.MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} />
-              </RouteLoader>
+              <MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} />
             </ProtectedRoute>
           } />
           <Route path="/history" element={
-            <RouteLoader>
-              <LazyRoutes.History history={history} currentUser={currentUser!} onVoid={handleVoidHistory} />
-            </RouteLoader>
+            <History history={history} currentUser={currentUser!} onVoid={handleVoidHistory} />
           } />
           <Route path="/crm" element={
             <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
@@ -277,9 +270,7 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/bookings" element={
-            <RouteLoader>
-              <LazyRoutes.Bookings bookings={bookings} setBookings={setBookings} onAddToQueue={addQueue} />
-            </RouteLoader>
+            <Bookings bookings={bookings} setBookings={setBookings} onAddToQueue={addQueue} />
           } />
           <Route path="/staff" element={
             <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
