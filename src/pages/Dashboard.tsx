@@ -3,7 +3,6 @@ import {
     AreaChart, Area, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { InventoryItem } from '../../types';
 
 interface DashboardProps {
     stats: {
@@ -11,16 +10,14 @@ interface DashboardProps {
         status: any[],
         summary: any
     };
-    inventory: InventoryItem[];
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ stats, inventory }) => {
-    const lowStock = inventory.filter(i => i.stock <= i.minStock);
+const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
 
     return (
         <div className="space-y-4 md:space-y-6 max-w-full overflow-hidden">
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 md:gap-4">
                 <div className="bg-white dark:bg-[#1A2230] p-4 md:p-6 rounded-xl border border-border-light dark:border-slate-800 shadow-soft hover:shadow-hover transition-shadow group cursor-default">
                     <div className="flex justify-between items-start mb-4">
                         <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary group-hover:bg-primary group-hover:text-white transition-colors">
@@ -42,21 +39,6 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, inventory }) => {
                     </div>
                     <h4 className="text-slate-500 text-sm font-medium mb-1">Vehicles Today</h4>
                     <p className="text-2xl font-bold text-slate-900 dark:text-white">{stats.summary.vehiclesToday || 0}</p>
-                </div>
-
-                <div className="bg-white dark:bg-[#1A2230] p-4 md:p-6 rounded-xl border border-border-light dark:border-slate-800 shadow-soft hover:shadow-hover transition-shadow group cursor-default">
-                    <div className="flex justify-between items-start mb-4">
-                        <div className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-600 group-hover:bg-red-500 group-hover:text-white transition-colors">
-                            <span className="material-symbols-outlined">warning</span>
-                        </div>
-                        {lowStock.length > 0 && (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                                Critical
-                            </span>
-                        )}
-                    </div>
-                    <h4 className="text-slate-500 text-sm font-medium mb-1">Low Stock Items</h4>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{lowStock.length}</p>
                 </div>
 
                 <div className="bg-white dark:bg-[#1A2230] p-6 rounded-xl border border-border-light dark:border-slate-800 shadow-soft hover:shadow-hover transition-shadow group cursor-default">
@@ -126,42 +108,6 @@ const Dashboard: React.FC<DashboardProps> = ({ stats, inventory }) => {
                     </ResponsiveContainer>
                 </div>
             </div>
-
-            {/* Alerts */}
-            {lowStock.length > 0 && (
-                <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl p-6">
-                    <h3 className="text-red-900 dark:text-red-300 font-bold flex items-center mb-4">
-                        <span className="material-symbols-outlined mr-2">warning</span>
-                        Inventory Alerts
-                    </h3>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                                <tr className="text-left text-red-500 font-bold uppercase text-xs tracking-wider">
-                                    <th className="pb-3 pl-2">Item</th>
-                                    <th className="pb-3">Remaining</th>
-                                    <th className="pb-3">Threshold</th>
-                                    <th className="pb-3">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {lowStock.map(item => (
-                                    <tr key={item.id} className="border-t border-red-100/50 hover:bg-red-100/30 transition-colors">
-                                        <td className="py-3 pl-2 font-medium text-slate-700 dark:text-slate-300">{item.name}</td>
-                                        <td className="py-3 font-bold text-red-600">{item.stock}</td>
-                                        <td className="py-3 text-slate-500">{item.minStock}</td>
-                                        <td className="py-3">
-                                            <button className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-xs font-bold rounded-lg shadow-sm transition-all">
-                                                Restock
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };

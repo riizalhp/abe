@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-    Wrench, LogOut, LayoutDashboard, Users, ShoppingCart,
+    Wrench, LogOut, LayoutDashboard, Users,
     History, MessageSquare, BookOpen, ShieldCheck
 } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
@@ -50,12 +50,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
                 )}
 
                 <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-6">Operations</p>
-
-                {(currentUser.role === Role.ADMIN || currentUser.role === Role.OWNER) && (
-                    <Link to="/inventory" className={`w-full flex items-center px-4 py-3.5 text-sm font-semibold rounded-xl transition-all duration-200 group ${isActive('/inventory')}`}>
-                        <ShoppingCart className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" /> Inventory
-                    </Link>
-                )}
 
                 <Link to="/history" className={`w-full flex items-center px-4 py-3.5 text-sm font-semibold rounded-xl transition-all duration-200 group ${isActive('/history')}`}>
                     <History className="w-5 h-5 mr-3 group-hover:scale-110 transition-transform" /> History

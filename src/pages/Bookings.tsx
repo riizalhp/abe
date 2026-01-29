@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { BookingRecord, ServiceRecord, BookingStatus } from '../../types';
 import { bookingService } from '../../services/bookingService';
 import { analyzeBookingWithAudio } from '../../services/geminiService';
+import { QRISPayment } from '../components/QRISPayment';
+import qrisService from '../../services/qrisService';
 
 interface BookingsProps {
     bookings: BookingRecord[];
@@ -12,6 +14,8 @@ interface BookingsProps {
 const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue }) => {
     const [selectedBooking, setSelectedBooking] = useState<BookingRecord | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [showPayment, setShowPayment] = useState(false);
+    const [paymentAmount, setPaymentAmount] = useState<number>(0);
 
     const handleUpdateStatus = async (id: string, status: BookingStatus) => {
         try {
@@ -63,6 +67,30 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
             alert("Analysis failed");
         }
         setIsAnalyzing(false);
+    };
+
+    const handleInitiatePayment = () => {
+        // Get default payment amount from QRIS service
+        const defaultAmount = qrisService.getDefaultAmount();
+        setPaymentAmount(defaultAmount);
+        setShowPayment(true);
+    };
+
+    const handlePaymentComplete = async () => {
+        if (selectedBooking) {
+            try {
+                // Update booking status to paid/confirmed
+                await handleUpdateStatus(selectedBooking.id, BookingStatus.CONFIRMED);
+                setShowPayment(false);
+                alert('Payment completed successfully! Booking confirmed.');
+            } catch (error) {
+                alert('Failed to update booking status after payment.');
+            }
+        }
+    };
+
+    const handlePaymentCancel = () => {
+        setShowPayment(false);
     };
 
     // Note: handleAnalyzeBooking logic is similar to MechanicView but handled inside Review modal here
@@ -208,11 +236,11 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                                     Reject
                                                 </button>
                                                 <button 
-                                                    onClick={() => handleUpdateStatus(selectedBooking.id, BookingStatus.CONFIRMED)} 
-                                                    className="px-4 py-2 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary/90 shadow-sm transition-colors flex items-center gap-1"
+                                                    onClick={handleInitiatePayment} 
+                                                    className="px-4 py-2 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 shadow-sm transition-colors flex items-center gap-1"
                                                 >
-                                                    <span className="material-symbols-outlined text-sm">check</span>
-                                                    Confirm
+                                                    <span className="material-symbols-outlined text-sm">payment</span>
+                                                    Pay & Confirm
                                                 </button>
                                             </>
                                         )}
@@ -237,6 +265,49 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                 </label>
                                 <p className="text-slate-800 dark:text-slate-200 leading-relaxed">"{selectedBooking.complaint}"</p>
                             </div>
+
+                            {/* Payment Information */}
+                            {selectedBooking.paymentMethod && (
+                                <div className="bg-white dark:bg-slate-800/30 border border-border-light dark:border-slate-700 p-4 rounded-xl">
+                                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-base">payment</span>
+                                        Payment Information
+                                    </label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <p className="text-sm text-slate-600 dark:text-slate-400">Method</p>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="material-symbols-outlined text-base text-primary">qr_code</span>
+                                                <span className="font-medium text-slate-900 dark:text-white">QRIS Payment</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm text-slate-600 dark:text-slate-400">Amount</p>
+                                            <p className="font-semibold text-lg text-slate-900 dark:text-white mt-1">
+                                                {selectedBooking.paymentAmount 
+                                                    ? `Rp ${selectedBooking.paymentAmount.toLocaleString('id-ID')}` 
+                                                    : 'Rp 25,000'}
+                                            </p>
+                                        </div>
+                                        {selectedBooking.transferProofBase64 && (
+                                            <div className="md:col-span-2">
+                                                <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Payment Proof (WebP)</p>
+                                                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                                                    <img 
+                                                        src={`data:image/webp;base64,${selectedBooking.transferProofBase64}`}
+                                                        alt="Payment proof"
+                                                        className="w-full max-w-md mx-auto object-contain"
+                                                        style={{ maxHeight: '200px' }}
+                                                    />
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-2 text-center">
+                                                    Screenshot/foto bukti pembayaran QRIS customer
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* AI Audio Analysis Section */}
                             {(selectedBooking.audioBase64 || selectedBooking.aiAnalysis) && (
@@ -296,6 +367,36 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                 </div>
                             )}
 
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* QRIS Payment Modal */}
+            {showPayment && selectedBooking && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-[#1A2230] rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden border border-border-light dark:border-slate-800 animate-in slide-in-from-bottom-8 duration-300">
+                        <div className="p-4 border-b border-border-light dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Payment Confirmation</h3>
+                                <button 
+                                    onClick={handlePaymentCancel}
+                                    className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                >
+                                    <span className="material-symbols-outlined">close</span>
+                                </button>
+                            </div>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                Booking: {selectedBooking.bookingCode}
+                            </p>
+                        </div>
+                        <div className="p-4">
+                            <QRISPayment
+                                amount={paymentAmount}
+                                description={`Booking Fee - ${selectedBooking.customerName}`}
+                                onPaymentComplete={handlePaymentComplete}
+                                onCancel={handlePaymentCancel}
+                            />
                         </div>
                     </div>
                 </div>

@@ -1,5 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { analyzeAudioDiagnosis } from '../../services/geminiService';
+import { QRISPayment } from '../components/QRISPayment';
+import qrisService from '../../services/qrisService';
+import timeSlotService, { TimeSlot } from '../../services/timeSlotService';
 
 interface GuestBookingProps {
     onSubmit: (data: any) => void;
@@ -20,10 +23,21 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [audioFileName, setAudioFileName] = useState<string>('');
+    const [paymentAmount, setPaymentAmount] = useState<number>(0);
+    const [paymentProof, setPaymentProof] = useState<File | null>(null);
+    const [paymentProofPreview, setPaymentProofPreview] = useState<string>('');
+    const [paymentProofWebP, setPaymentProofWebP] = useState<string>('');
+    const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        // Load available time slots when component mounts
+        const availableSlots = timeSlotService.getActiveTimeSlots();
+        setTimeSlots(availableSlots);
+    }, []);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -72,12 +86,82 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
         }
     };
 
+    // Function to convert image to WebP format
+    const convertToWebP = (file: File): Promise<string> => {
+        return new Promise((resolve, reject) => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const img = new Image();
+            
+            img.onload = () => {
+                // Set canvas size to image size
+                canvas.width = img.width;
+                canvas.height = img.height;
+                
+                // Draw image to canvas
+                ctx?.drawImage(img, 0, 0);
+                
+                // Convert to WebP with 85% quality
+                const webpDataUrl = canvas.toDataURL('image/webp', 0.85);
+                resolve(webpDataUrl);
+            };
+            
+            img.onerror = () => reject(new Error('Failed to load image'));
+            img.src = URL.createObjectURL(file);
+        });
+    };
+
+    const handlePaymentProofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            // Validate file type
+            const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+            if (!validTypes.includes(file.type)) {
+                alert('Please upload an image file (JPG, PNG, GIF)');
+                return;
+            }
+            
+            // Validate file size (max 5MB)
+            if (file.size > 5 * 1024 * 1024) {
+                alert('File size should not exceed 5MB');
+                return;
+            }
+            
+            setPaymentProof(file);
+            
+            try {
+                // Convert to WebP and create preview
+                const webpDataUrl = await convertToWebP(file);
+                setPaymentProofWebP(webpDataUrl);
+                setPaymentProofPreview(webpDataUrl);
+            } catch (error) {
+                console.error('Failed to convert image:', error);
+                // Fallback to original image
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const dataUrl = e.target?.result as string;
+                    setPaymentProofPreview(dataUrl);
+                    setPaymentProofWebP(dataUrl);
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+    };
+
     const handleStep1Submit = (e: React.FormEvent) => {
         e.preventDefault();
+        // Get default payment amount from QRIS service
+        const defaultAmount = qrisService.getDefaultAmount();
+        setPaymentAmount(defaultAmount || 25000); // Fallback to 25000 if no default
         setStep(2);
     };
 
     const handlePaymentSuccess = () => {
+        if (!paymentProof) {
+            alert('Please upload payment proof first');
+            return;
+        }
+        
         // Simulating payment process
         setTimeout(() => {
             setStep(3);
@@ -87,6 +171,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const handleFinalSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         let audioBase64 = '';
+        let paymentProofBase64 = '';
+        
         if (audioBlob) {
             const reader = new FileReader();
             reader.readAsDataURL(audioBlob);
@@ -97,7 +183,19 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 };
             });
         }
-        onSubmit({ ...formData, audioBase64 });
+        
+        if (paymentProofWebP) {
+            // Use WebP data directly (already base64)
+            paymentProofBase64 = paymentProofWebP.split(',')[1] || '';
+        }
+        
+        onSubmit({ 
+            ...formData, 
+            audioBase64,
+            paymentMethod: 'QRIS',
+            transferProofBase64: paymentProofBase64, // Reusing same field name
+            paymentAmount
+        });
     };
 
     return (
@@ -225,20 +323,24 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                         <div className="space-y-2">
                                             <div className="text-sm text-gray-600 mb-2">Available Slots</div>
                                             <div className="grid grid-cols-2 gap-2">
-                                                {['09:00', '10:30', '01:00', '03:30'].map((time, idx) => (
+                                                {timeSlots.length > 0 ? timeSlots.map((slot) => (
                                                     <button
-                                                        key={time}
+                                                        key={slot.id}
                                                         type="button"
-                                                        onClick={() => setFormData({...formData, bookingTime: time})}
+                                                        onClick={() => setFormData({...formData, bookingTime: slot.time})}
                                                         className={`p-2 text-sm rounded-lg border transition-colors ${
-                                                            formData.bookingTime === time 
+                                                            formData.bookingTime === slot.time 
                                                                 ? 'bg-primary text-white border-primary' 
                                                                 : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
                                                         }`}
                                                     >
-                                                        {time} {idx < 2 ? 'AM' : 'PM'}
+                                                        {slot.label}
                                                     </button>
-                                                ))}
+                                                )) : (
+                                                    <div className="col-span-2 p-4 text-center text-gray-500 text-sm">
+                                                        No time slots available. Please contact admin.
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className="flex items-center text-xs text-gray-500 mt-2">
                                                 <span className="material-symbols-outlined text-sm mr-1">schedule</span>
@@ -264,59 +366,129 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                         </div>
                     )}
 
-                    {/* STEP 2: Payment Confirmation */}
+{/* STEP 2: QRIS Payment */}
                     {step === 2 && (
                         <div className="p-6">
-                            <div className="text-center space-y-6">
-                                <div>
-                                    <h3 className="text-2xl font-bold text-gray-900 mb-1">Confirm Payment</h3>
-                                    <p className="text-gray-600">{formData.vehicleModel} - Full Service Package</p>
+                            <div className="text-center mb-6">
+                                <h3 className="text-2xl font-bold text-gray-900 mb-1">QRIS Payment</h3>
+                                <p className="text-gray-600">{formData.vehicleModel} - Booking Fee</p>
+                                <div className="text-2xl font-bold text-primary mt-2">
+                                    {paymentAmount > 0 ? `Rp ${paymentAmount.toLocaleString('id-ID')}` : 'Rp 25,000'}
+                                </div>
+                            </div>
+
+                            {/* Warning Message */}
+                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <div className="flex items-start space-x-3">
+                                    <span className="material-symbols-outlined text-yellow-600 mt-0.5">warning</span>
+                                    <div className="text-sm text-yellow-800">
+                                        <p className="font-semibold mb-1">⚠️ Penting - Simpan Bukti Pembayaran!</p>
+                                        <ul className="list-disc list-inside space-y-1">
+                                            <li>Screenshot atau foto bukti pembayaran QRIS</li>
+                                            <li>Simpan bukti setelah pembayaran berhasil</li>
+                                            <li>Upload bukti untuk melanjutkan proses booking</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* QRIS Payment Component */}
+                            <div className="mb-6">
+                                <QRISPayment
+                                    amount={paymentAmount || 25000}
+                                    description={`Booking Fee - ${formData.customerName}`}
+                                    onPaymentComplete={() => {
+                                        // Don't proceed automatically, wait for proof upload
+                                        document.getElementById('proof-upload-section')?.scrollIntoView({ behavior: 'smooth' });
+                                    }}
+                                    onCancel={() => setStep(1)}
+                                />
+                            </div>
+
+                            {/* Upload Payment Proof Section */}
+                            <div id="proof-upload-section" className="border-t border-gray-200 pt-6">
+                                <div className="mb-4">
+                                    <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Bukti Pembayaran</h4>
+                                    <p className="text-sm text-gray-600">
+                                        Setelah melakukan pembayaran QRIS, silakan upload screenshot/foto bukti pembayaran
+                                    </p>
                                 </div>
 
                                 <div className="space-y-4">
-                                    <div className="text-4xl font-bold text-gray-900">Rp 25.000</div>
-                                    <div className="flex items-center justify-center gap-1 text-green-600">
-                                        <span className="material-symbols-outlined text-sm">verified</span>
-                                        <span className="text-sm font-medium">Verified Price</span>
+                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handlePaymentProofUpload}
+                                            className="hidden"
+                                            id="payment-proof-upload"
+                                        />
+                                        <label htmlFor="payment-proof-upload" className="cursor-pointer">
+                                            {paymentProofPreview ? (
+                                                <div className="space-y-3">
+                                                    <img
+                                                        src={paymentProofPreview}
+                                                        alt="Payment proof preview"
+                                                        className="max-w-full max-h-48 mx-auto rounded-lg shadow-md"
+                                                    />
+                                                    <p className="text-sm text-gray-600">
+                                                        {paymentProof?.name} (Converted to WebP)
+                                                    </p>
+                                                    <p className="text-xs text-primary">Click to change image</p>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    <span className="material-symbols-outlined text-4xl text-gray-400">cloud_upload</span>
+                                                    <div>
+                                                        <p className="text-lg font-medium text-gray-700">Upload Bukti Pembayaran</p>
+                                                        <p className="text-sm text-gray-500">JPG, PNG, GIF up to 5MB</p>
+                                                        <p className="text-xs text-gray-400 mt-1">Auto-converted to WebP format</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </label>
                                     </div>
-                                </div>
-
-                                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-6 bg-blue-600 rounded flex items-center justify-center">
-                                            <span className="text-white text-xs font-bold">VISA</span>
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="text-sm font-medium text-gray-900">Visa ending in 4242</div>
-                                            <div className="text-xs text-gray-500">Expires 12/25</div>
-                                        </div>
-                                        <button className="text-primary text-sm font-medium">Edit</button>
-                                    </div>
-                                </div>
-
-                                <div className="text-center space-y-2">
-                                    <p className="text-sm text-gray-600">Deposit akan dipotong dari total servis.</p>
-                                    <p className="text-xs text-gray-500">Refundable up to 24 hours before appointment.</p>
-                                </div>
-
-                                <div className="space-y-3">
-                                    <button
-                                        onClick={handlePaymentSuccess}
-                                        className="w-full bg-primary text-white py-4 rounded-lg font-semibold text-lg hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <span className="material-symbols-outlined">lock</span>
-                                        Pay Now
-                                    </button>
                                     
-                                    <div className="flex items-center justify-center gap-1 text-xs text-gray-500">
-                                        <span className="material-symbols-outlined text-sm">security</span>
-                                        SSL SECURED PAYMENT
-                                    </div>
+                                    {paymentProof && (
+                                        <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                                            <div className="flex items-center space-x-3">
+                                                <span className="material-symbols-outlined text-green-600">check_circle</span>
+                                                <span className="text-sm font-medium text-green-800">Payment proof uploaded & converted to WebP</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setPaymentProof(null);
+                                                    setPaymentProofPreview('');
+                                                    setPaymentProofWebP('');
+                                                }}
+                                                className="text-green-600 hover:text-green-800"
+                                            >
+                                                <span className="material-symbols-outlined text-sm">close</span>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
-                                <div className="text-xs text-gray-500 text-center">
-                                    By booking, you agree to our Terms of Service. Need help? Call Support at 1-800-AUTO
-                                </div>
+                                {/* Continue Button */}
+                                <button
+                                    type="button"
+                                    onClick={handlePaymentSuccess}
+                                    disabled={!paymentProof}
+                                    className={`w-full mt-6 py-4 rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2 ${
+                                        paymentProof
+                                            ? 'bg-primary text-white hover:bg-primary/90'
+                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    }`}
+                                >
+                                    <span className="material-symbols-outlined">verified</span>
+                                    {paymentProof ? 'Continue to Next Step' : 'Upload Payment Proof to Continue'}
+                                </button>
+                            </div>
+
+                            <div className="text-center space-y-2 mt-6">
+                                <p className="text-sm text-gray-600">Booking fee akan dipotong dari total servis.</p>
+                                <p className="text-xs text-gray-500">Refundable up to 24 hours before appointment.</p>
                             </div>
                         </div>
                     )}

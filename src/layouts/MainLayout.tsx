@@ -25,17 +25,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ currentUser, onLogout }) => {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="relative hidden xl:block">
-                            <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[20px]">search</span>
-                            <input 
-                                className="h-10 pl-10 pr-4 w-48 xl:w-64 rounded-lg bg-slate-50 dark:bg-slate-800 border-none text-sm focus:ring-2 focus:ring-primary/20 placeholder-slate-400" 
-                                placeholder="Search..." 
-                                type="text"
-                            />
-                        </div>
-                        <button className="size-10 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors xl:hidden">
-                            <span className="material-symbols-outlined">search</span>
-                        </button>
                         <button className="size-10 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
                             <span className="material-symbols-outlined">notifications</span>
                         </button>

@@ -41,13 +41,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
       roleRequired: [Role.MEKANIK, Role.ADMIN, Role.OWNER]
     },
     { 
-      path: '/inventory', 
-      label: 'Inventory', 
-      icon: 'inventory',
-      category: 'Management',
-      roleRequired: [Role.ADMIN, Role.OWNER]
-    },
-    { 
       path: '/history', 
       label: 'Service History', 
       icon: 'history',
@@ -64,6 +57,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
       path: '/staff', 
       label: 'Staff Management', 
       icon: 'group',
+      category: 'Administration',
+      roleRequired: [Role.ADMIN, Role.OWNER]
+    },
+    { 
+      path: '/qris-settings', 
+      label: 'QRIS Settings', 
+      icon: 'qr_code',
+      category: 'Administration',
+      roleRequired: [Role.ADMIN, Role.OWNER]
+    },
+    { 
+      path: '/time-slot-settings', 
+      label: 'Time Slots', 
+      icon: 'schedule',
       category: 'Administration',
       roleRequired: [Role.ADMIN, Role.OWNER]
     },

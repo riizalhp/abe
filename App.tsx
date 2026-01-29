@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Settings } from 'lucide-react';
 
-import { Role, User, InventoryItem, ServiceRecord, QueueStatus, ServiceReminder, BookingRecord, BookingStatus, ServiceWeight } from './types';
+import { Role, User, ServiceRecord, QueueStatus, ServiceReminder, BookingRecord, BookingStatus, ServiceWeight } from './types';
 import { userService } from './services/userService';
-import { inventoryService } from './services/inventoryService';
 import { serviceRecordService } from './services/serviceRecordService';
 import { bookingService } from './services/bookingService';
 import { reminderService } from './services/reminderService';
+import ErrorBoundary from './src/components/ErrorBoundary';
+import ProtectedRoute, { ROLE_PERMISSIONS } from './src/components/ProtectedRoute';
 
 // Layouts & Pages
 import MainLayout from './src/layouts/MainLayout';
@@ -16,12 +17,13 @@ import LoginPage from './src/pages/LoginPage';
 import Dashboard from './src/pages/Dashboard';
 import FrontOffice from './src/pages/FrontOffice';
 import MechanicWorkbench from './src/pages/MechanicWorkbench';
-import InventoryView from './src/pages/Inventory';
 import History from './src/pages/History';
 import CRM from './src/pages/CRM';
 import Bookings from './src/pages/Bookings';
 import Staff from './src/pages/Staff';
 import Queue from './src/pages/Queue';
+import { QRISSettings } from './src/pages/QRISSettings';
+import { TimeSlotSettings } from './src/pages/TimeSlotSettings';
 
 import GuestBooking from './src/pages/GuestBooking';
 import GuestTracking from './src/pages/GuestTracking';
@@ -29,7 +31,6 @@ import GuestTracking from './src/pages/GuestTracking';
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [users, setUsers] = useState<User[]>([]);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [queue, setQueue] = useState<ServiceRecord[]>([]);
   const [history, setHistory] = useState<ServiceRecord[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -40,16 +41,14 @@ function App() {
 
   const refreshData = useCallback(async () => {
     try {
-      const [u, i, q, h, b, r] = await Promise.all([
+      const [u, q, h, b, r] = await Promise.all([
         userService.getAll(),
-        inventoryService.getAll(),
         serviceRecordService.getQueue(),
         serviceRecordService.getHistory(),
         bookingService.getAll(),
         reminderService.getAll()
       ]);
       setUsers(u);
-      setInventory(i);
       setQueue(q.sort((a, b) => new Date(a.entryTime).getTime() - new Date(b.entryTime).getTime()));
       setHistory(h.sort((a, b) => new Date(b.entryTime).getTime() - new Date(a.entryTime).getTime()));
       setBookings(b);
@@ -77,11 +76,19 @@ function App() {
   const handleAddUser = async (user: Partial<User>) => {
     try {
       console.log('Creating user with data:', user);
-      const newUser = await userService.create({
+      
+      // Sanitize user input
+      const sanitizedUser = {
         ...user,
+        name: SecurityUtils.sanitizeInput(user.name || ''),
+        email: SecurityUtils.sanitizeInput(user.email || ''),
+        specialization: user.specialization ? SecurityUtils.sanitizeInput(user.specialization) : undefined,
         role: user.role || Role.MEKANIK,
         avatar: user.avatar || '',
-        specialization: user.specialization,
+      };
+      
+      const newUser = await userService.create({
+        ...sanitizedUser,
         status: 'ACTIVE',
         username: user.username || `user${Date.now()}`,
         password: user.password || '123'
@@ -219,8 +226,9 @@ function App() {
   };
 
   return (
-    <Router>
-      <Routes>
+    <ErrorBoundary>
+      <Router>
+        <Routes>
         {/* Public Routes */}
         <Route
           path="/"
@@ -241,22 +249,61 @@ function App() {
 
         {/* Protected Routes */}
         <Route element={currentUser ? <MainLayout currentUser={currentUser} onLogout={handleLogout} /> : <Navigate to="/login" />}>
-          <Route path="/dashboard" element={<Dashboard stats={dashboardStats} inventory={inventory} />} />
-          <Route path="/front-office" element={<FrontOffice onAddQueue={addQueue} />} />
-          <Route path="/mechanic-workbench" element={<MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} />} />
-          <Route path="/inventory" element={<InventoryView inventory={inventory} onRefresh={refreshData} />} />
-          <Route path="/history" element={<History history={history} currentUser={currentUser!} onVoid={handleVoidHistory} />} />
-          <Route path="/crm" element={<CRM history={history} reminders={reminders} setReminders={setReminders} />} />
-          <Route path="/bookings" element={<Bookings bookings={bookings} setBookings={setBookings} onAddToQueue={addQueue} />} />
-          <Route path="/staff" element={<Staff users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} />} />
+          <Route path="/dashboard" element={
+            <RouteLoader>
+              <LazyRoutes.Dashboard stats={dashboardStats} />
+            </RouteLoader>
+          } />
+          <Route path="/front-office" element={
+            <RouteLoader>
+              <LazyRoutes.FrontOffice onAddQueue={addQueue} />
+            </RouteLoader>
+          } />
+          <Route path="/mechanic-workbench" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.OPERATIONS}>
+              <RouteLoader>
+                <LazyRoutes.MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} />
+              </RouteLoader>
+            </ProtectedRoute>
+          } />
+          <Route path="/history" element={
+            <RouteLoader>
+              <LazyRoutes.History history={history} currentUser={currentUser!} onVoid={handleVoidHistory} />
+            </RouteLoader>
+          } />
+          <Route path="/crm" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
+              <CRM history={history} reminders={reminders} setReminders={setReminders} />
+            </ProtectedRoute>
+          } />
+          <Route path="/bookings" element={
+            <RouteLoader>
+              <LazyRoutes.Bookings bookings={bookings} setBookings={setBookings} onAddToQueue={addQueue} />
+            </RouteLoader>
+          } />
+          <Route path="/staff" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
+              <Staff users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} />
+            </ProtectedRoute>
+          } />
+          <Route path="/qris-settings" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
+              <QRISSettings />
+            </ProtectedRoute>
+          } />
+          <Route path="/time-slot-settings" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
+              <TimeSlotSettings />
+            </ProtectedRoute>
+          } />
           <Route path="/queue" element={<Queue queue={queue} updateStatus={updateQueueStatus} />} />
-
 
           {/* Fallback for under construction */}
           <Route path="/cashier" element={<UnderConstruction />} />
         </Route>
       </Routes>
     </Router>
+    </ErrorBoundary>
   );
 }
 

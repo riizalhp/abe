@@ -10,8 +10,17 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+
+# Environment files - NEVER commit API keys!
+.env
+.env.local
+.env.development
+.env.production
+.env*.local
 *.local
-*.env.local.example
+
+# Keep example files
+!.env.example
 
 # Editor directories and files
 .vscode/*
@@ -23,3 +32,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# OS files
+Thumbs.db
+*.tmp

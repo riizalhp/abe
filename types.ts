@@ -53,16 +53,6 @@ export interface User {
   status?: 'ACTIVE' | 'BUSY' | 'OFF';
 }
 
-export interface InventoryItem {
-  id: string;
-  name: string;
-  stock: number;
-  minStock: number;
-  price: number;
-  category: string;
-  unit: string;
-}
-
 export interface ServiceRecord {
   id: string;
   ticketNumber: string;
@@ -116,9 +106,12 @@ export interface BookingRecord {
   aiAnalysis?: string; // Result from Gemini after admin approval
   status: BookingStatus;
   mechanicId?: string; // Assigned mechanic
+  paymentMethod?: PaymentMethod;
+  transferProofBase64?: string; // For bank transfer proof
+  paymentAmount?: number;
   createdAt: string;
 }
 
 export interface ViewState {
-  currentView: 'LOGIN' | 'DASHBOARD' | 'FRONT_OFFICE' | 'QUEUE' | 'MECHANIC' | 'INVENTORY' | 'CASHIER' | 'CRM' | 'FINANCE' | 'LOGS' | 'HISTORY' | 'REMINDER' | 'GUEST_BOOKING' | 'GUEST_TRACKING' | 'BOOKING_ADMIN' | 'USERS';
+  currentView: 'LOGIN' | 'DASHBOARD' | 'FRONT_OFFICE' | 'QUEUE' | 'MECHANIC' | 'CASHIER' | 'CRM' | 'FINANCE' | 'LOGS' | 'HISTORY' | 'REMINDER' | 'GUEST_BOOKING' | 'GUEST_TRACKING' | 'BOOKING_ADMIN' | 'USERS';
 }

@@ -55,6 +55,9 @@ const mapToBookingRecord = (data: any): BookingRecord => ({
     aiAnalysis: data.ai_analysis,
     status: data.status as BookingStatus,
     mechanicId: data.mechanic_id,
+    paymentMethod: data.payment_method,
+    transferProofBase64: data.transfer_proof_base64,
+    paymentAmount: data.payment_amount,
     createdAt: data.created_at
 });
 
@@ -72,5 +75,8 @@ const mapToDbBooking = (booking: Partial<BookingRecord>): any => {
     if (booking.aiAnalysis) dbBooking.ai_analysis = booking.aiAnalysis;
     if (booking.status) dbBooking.status = booking.status;
     if (booking.mechanicId) dbBooking.mechanic_id = booking.mechanicId;
+    if (booking.paymentMethod) dbBooking.payment_method = booking.paymentMethod;
+    if (booking.transferProofBase64) dbBooking.transfer_proof_base64 = booking.transferProofBase64;
+    if (booking.paymentAmount) dbBooking.payment_amount = booking.paymentAmount;
     return dbBooking;
 }
