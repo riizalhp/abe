@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { User, Role } from '../../types';
+import { useWorkshop } from '../../lib/WorkshopContext';
 
 interface SidebarProps {
   currentUser: User | null;
@@ -8,6 +9,8 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
+  const { currentWorkshop } = useWorkshop();
+
   const menuItems = [
     { 
       path: '/dashboard', 
@@ -71,6 +74,27 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
       path: '/time-slot-settings', 
       label: 'Time Slots', 
       icon: 'schedule',
+      category: 'Administration',
+      roleRequired: [Role.ADMIN, Role.OWNER]
+    },
+    { 
+      path: '/moota-settings', 
+      label: 'Moota Payment', 
+      icon: 'account_balance',
+      category: 'Administration',
+      roleRequired: [Role.ADMIN, Role.OWNER]
+    },
+    { 
+      path: '/workshop-settings', 
+      label: 'Workshop Settings', 
+      icon: 'storefront',
+      category: 'Administration',
+      roleRequired: [Role.OWNER]
+    },
+    { 
+      path: '/url-settings', 
+      label: 'URL Settings', 
+      icon: 'link',
       category: 'Administration',
       roleRequired: [Role.ADMIN, Role.OWNER]
     },

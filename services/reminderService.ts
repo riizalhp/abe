@@ -1,21 +1,37 @@
 
 import { supabase } from '../lib/supabase';
 import { ServiceReminder, ReminderStatus } from '../types';
+import { getStoredWorkshopId } from '../lib/WorkshopContext';
 
 export const reminderService = {
     async getAll(): Promise<ServiceReminder[]> {
-        // In a real app, you might want to filter by status or date
-        const { data, error } = await supabase
+        const workshopId = getStoredWorkshopId();
+        
+        let query = supabase
             .from('reminders')
             .select('*')
             .order('next_service_date', { ascending: true });
+        
+        // Filter by workshop_id if user is logged in
+        if (workshopId) {
+            query = query.eq('workshop_id', workshopId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
-        return data.map(mapToReminder);
+        return (data || []).map(mapToReminder);
     },
 
     async create(reminder: Partial<ServiceReminder>): Promise<ServiceReminder> {
+        const workshopId = getStoredWorkshopId();
         const dbReminder = mapToDbReminder(reminder);
+        
+        // Always set workshop_id
+        if (workshopId) {
+            dbReminder.workshop_id = workshopId;
+        }
+        
         const { data, error } = await supabase
             .from('reminders')
             .insert([dbReminder])

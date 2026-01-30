@@ -1,31 +1,46 @@
 
 import { supabase } from '../lib/supabase';
 import { ServiceRecord, QueueStatus } from '../types';
+import { getStoredWorkshopId } from '../lib/WorkshopContext';
 
 export const serviceRecordService = {
     async getQueue(): Promise<ServiceRecord[]> {
-        const { data, error } = await supabase
+        const workshopId = getStoredWorkshopId();
+        
+        let query = supabase
             .from('service_records')
             .select('*')
             .in('status', [QueueStatus.WAITING, QueueStatus.PROCESS, QueueStatus.PENDING])
             .order('created_at', { ascending: true });
+        
+        // Filter by workshop_id if user is logged in
+        if (workshopId) {
+            query = query.eq('workshop_id', workshopId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
-        // Map snake_case to camelCase if DB returns snake_case, but we defined columns as snake_case in SQL 
-        // and types as camelCase. Supabase js doesn't auto-convert.
-        // We need to map it manually or align types.
-        // For this migration, I will assume we need to map.
-        return data.map(mapToServiceRecord);
+        return (data || []).map(mapToServiceRecord);
     },
 
     async getHistory(): Promise<ServiceRecord[]> {
-        console.log('Fetching service history...');
-        const { data, error } = await supabase
+        const workshopId = getStoredWorkshopId();
+        console.log('Fetching service history for workshop:', workshopId);
+        
+        let query = supabase
             .from('service_records')
             .select('*')
             .in('status', [QueueStatus.FINISHED, QueueStatus.PAID, QueueStatus.VOID, QueueStatus.CANCELLED])
             .order('created_at', { ascending: false });
+        
+        // Filter by workshop_id if user is logged in
+        if (workshopId) {
+            query = query.eq('workshop_id', workshopId);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error('Service history query error:', error);
@@ -37,7 +52,14 @@ export const serviceRecordService = {
     },
 
     async create(record: Partial<ServiceRecord>): Promise<ServiceRecord> {
+        const workshopId = getStoredWorkshopId();
         const dbRecord = mapToDbRecord(record);
+        
+        // Always set workshop_id
+        if (workshopId) {
+            dbRecord.workshop_id = workshopId;
+        }
+        
         const { data, error } = await supabase
             .from('service_records')
             .insert([dbRecord])

@@ -4,6 +4,7 @@ import { Settings } from 'lucide-react';
 
 import { Role, User, ServiceRecord, QueueStatus, ServiceReminder, BookingRecord, BookingStatus, ServiceWeight } from './types';
 import { SecurityUtils } from './lib/security';
+import { WorkshopProvider, useWorkshop } from './lib/WorkshopContext';
 import { userService } from './services/userService';
 import { serviceRecordService } from './services/serviceRecordService';
 import { bookingService } from './services/bookingService';
@@ -15,6 +16,7 @@ import ProtectedRoute, { ROLE_PERMISSIONS } from './src/components/ProtectedRout
 import MainLayout from './src/layouts/MainLayout';
 import LandingPage from './src/pages/LandingPage';
 import LoginPage from './src/pages/LoginPage';
+import RegisterPage from './src/pages/RegisterPage';
 import Dashboard from './src/pages/Dashboard';
 import FrontOffice from './src/pages/FrontOffice';
 import MechanicWorkbench from './src/pages/MechanicWorkbench';
@@ -25,12 +27,17 @@ import Staff from './src/pages/Staff';
 import Queue from './src/pages/Queue';
 import { QRISSettings } from './src/pages/QRISSettings';
 import { TimeSlotSettings } from './src/pages/TimeSlotSettings';
+import URLSettings from './src/pages/URLSettings';
+import MootaSettingsPage from './src/pages/MootaSettings';
+import WorkshopSettings from './src/pages/WorkshopSettings';
+import JoinWorkshop from './src/pages/JoinWorkshop';
 
 import GuestBooking from './src/pages/GuestBooking';
 import GuestTracking from './src/pages/GuestTracking';
 
-function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+// Inner App component that uses the context
+function AppContent() {
+  const { currentUser, isAuthenticated, isLoading, logout } = useWorkshop();
   const [users, setUsers] = useState<User[]>([]);
   const [queue, setQueue] = useState<ServiceRecord[]>([]);
   const [history, setHistory] = useState<ServiceRecord[]>([]);
@@ -41,6 +48,16 @@ function App() {
   const [activeTrackingCode, setActiveTrackingCode] = useState('');
 
   const refreshData = useCallback(async () => {
+    // Only fetch data if user is authenticated
+    if (!isAuthenticated) {
+      setUsers([]);
+      setQueue([]);
+      setHistory([]);
+      setBookings([]);
+      setReminders([]);
+      return;
+    }
+    
     try {
       const [u, q, h, b, r] = await Promise.all([
         userService.getAll(),
@@ -57,21 +74,17 @@ function App() {
     } catch (e) {
       console.error("Failed to load data", e);
     }
-  }, []);
+  }, [isAuthenticated]);
 
+  // Refresh data when user logs in/out
   useEffect(() => {
     refreshData();
     const interval = setInterval(refreshData, 30000); // Poll every 30s
     return () => clearInterval(interval);
   }, [refreshData]);
 
-  const handleLogin = (user: User) => {
-    setCurrentUser(user);
-    // Navigation is handled by the component wrapper via Navigate or useNavigate
-  };
-
   const handleLogout = () => {
-    setCurrentUser(null);
+    logout();
   };
 
   const handleAddUser = async (user: Partial<User>) => {
@@ -226,9 +239,20 @@ function App() {
     }
   };
 
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ErrorBoundary>
-      <Router>
         <Routes>
         {/* Public Routes */}
         <Route
@@ -237,19 +261,37 @@ function App() {
         />
         <Route
           path="/login"
-          element={!currentUser ? <LoginWrapper onLogin={handleLogin} users={users} /> : <Navigate to="/dashboard" />}
+          element={!isAuthenticated ? <LoginWrapper /> : <Navigate to="/dashboard" />}
         />
         <Route
+          path="/register"
+          element={!isAuthenticated ? <RegisterPage /> : <Navigate to="/dashboard" />}
+        />
+        {/* Guest Booking Routes - supports both default and per-workshop */}
+        <Route
           path="/booking/new"
+          element={<GuestBookingWrapper onSubmit={handleGuestBookingSubmit} />}
+        />
+        <Route
+          path="/booking/:workshopSlug"
           element={<GuestBookingWrapper onSubmit={handleGuestBookingSubmit} />}
         />
         <Route
           path="/tracking"
           element={<GuestTrackingWrapper bookings={bookings} initialCode={activeTrackingCode} setCode={setActiveTrackingCode} />}
         />
+        <Route
+          path="/tracking/:workshopSlug"
+          element={<GuestTrackingWrapper bookings={bookings} initialCode={activeTrackingCode} setCode={setActiveTrackingCode} />}
+        />
+        {/* Join Workshop via Invitation */}
+        <Route
+          path="/join/:inviteCode"
+          element={<JoinWorkshop />}
+        />
 
         {/* Protected Routes */}
-        <Route element={currentUser ? <MainLayout currentUser={currentUser} onLogout={handleLogout} /> : <Navigate to="/login" />}>
+        <Route element={isAuthenticated ? <MainLayout currentUser={currentUser!} onLogout={handleLogout} /> : <Navigate to="/login" />}>
           <Route path="/dashboard" element={
             <Dashboard stats={dashboardStats} />
           } />
@@ -287,14 +329,39 @@ function App() {
               <TimeSlotSettings />
             </ProtectedRoute>
           } />
+          <Route path="/url-settings" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
+              <URLSettings />
+            </ProtectedRoute>
+          } />
+          <Route path="/moota-settings" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
+              <MootaSettingsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/workshop-settings" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={[Role.OWNER]}>
+              <WorkshopSettings currentUser={currentUser!} />
+            </ProtectedRoute>
+          } />
           <Route path="/queue" element={<Queue queue={queue} updateStatus={updateQueueStatus} />} />
 
           {/* Fallback for under construction */}
           <Route path="/cashier" element={<UnderConstruction />} />
         </Route>
       </Routes>
-    </Router>
     </ErrorBoundary>
+  );
+}
+
+// Main App wrapper with providers
+function App() {
+  return (
+    <Router>
+      <WorkshopProvider>
+        <AppContent />
+      </WorkshopProvider>
+    </Router>
   );
 }
 
@@ -304,9 +371,9 @@ const LandingPageWrapper = () => {
   return <LandingPage onLoginClick={() => navigate('/login')} onGuestBooking={() => navigate('/booking/new')} onGuestTracking={() => navigate('/tracking')} />;
 };
 
-const LoginWrapper = ({ onLogin, users }: { onLogin: (u: User) => void, users: User[] }) => {
+const LoginWrapper = () => {
   const navigate = useNavigate();
-  return <LoginPage onLogin={onLogin} onBack={() => navigate('/')} users={users} />;
+  return <LoginPage onBack={() => navigate('/')} />;
 };
 
 const GuestBookingWrapper = ({ onSubmit }: { onSubmit: (data: any, nav: any) => void }) => {

@@ -1,20 +1,39 @@
 
 import { supabase } from '../lib/supabase';
 import { BookingRecord, BookingStatus } from '../types';
+import { getStoredWorkshopId } from '../lib/WorkshopContext';
 
 export const bookingService = {
     async getAll(): Promise<BookingRecord[]> {
-        const { data, error } = await supabase
+        const workshopId = getStoredWorkshopId();
+        
+        let query = supabase
             .from('bookings')
             .select('*')
             .order('created_at', { ascending: false });
+        
+        // Filter by workshop_id if user is logged in
+        if (workshopId) {
+            query = query.eq('workshop_id', workshopId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
-        return data.map(mapToBookingRecord);
+        return (data || []).map(mapToBookingRecord);
     },
 
     async create(booking: Partial<BookingRecord>): Promise<BookingRecord> {
+        const workshopId = getStoredWorkshopId();
         const dbBooking = mapToDbBooking(booking);
+        
+        // Set workshop_id if logged in, or use provided workshopId
+        if (workshopId) {
+            dbBooking.workshop_id = workshopId;
+        } else if (booking.workshopId) {
+            dbBooking.workshop_id = booking.workshopId;
+        }
+        
         const { data, error } = await supabase
             .from('bookings')
             .insert([dbBooking])
@@ -58,7 +77,9 @@ const mapToBookingRecord = (data: any): BookingRecord => ({
     paymentMethod: data.payment_method,
     transferProofBase64: data.transfer_proof_base64,
     paymentAmount: data.payment_amount,
-    createdAt: data.created_at
+    createdAt: data.created_at,
+    workshopId: data.workshop_id,
+    workshopSlug: data.workshop_slug
 });
 
 const mapToDbBooking = (booking: Partial<BookingRecord>): any => {
@@ -78,5 +99,6 @@ const mapToDbBooking = (booking: Partial<BookingRecord>): any => {
     if (booking.paymentMethod) dbBooking.payment_method = booking.paymentMethod;
     if (booking.transferProofBase64) dbBooking.transfer_proof_base64 = booking.transferProofBase64;
     if (booking.paymentAmount) dbBooking.payment_amount = booking.paymentAmount;
+    if (booking.workshopId) dbBooking.workshop_id = booking.workshopId;
     return dbBooking;
 }

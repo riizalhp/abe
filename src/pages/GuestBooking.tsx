@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { analyzeAudioDiagnosis } from '../../services/geminiService';
-import { QRISPayment } from '../components/QRISPayment';
-import qrisService from '../../services/qrisService';
+import { MootaPayment } from '../components/MootaPayment';
+import mootaService from '../../services/mootaService';
 import timeSlotService, { TimeSlot } from '../../services/timeSlotService';
+import workshopService, { PublicWorkshopInfo } from '../../services/workshopService';
 
 interface GuestBookingProps {
     onSubmit: (data: any) => void;
@@ -10,7 +12,13 @@ interface GuestBookingProps {
 }
 
 const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
+    const { workshopSlug } = useParams<{ workshopSlug?: string }>();
+    
     const [step, setStep] = useState(1);
+    const [workshop, setWorkshop] = useState<PublicWorkshopInfo | null>(null);
+    const [workshopLoading, setWorkshopLoading] = useState(true);
+    const [workshopError, setWorkshopError] = useState<string | null>(null);
+    
     const [formData, setFormData] = useState({
         customerName: '',
         phone: '',
@@ -23,21 +31,58 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const [isRecording, setIsRecording] = useState(false);
     const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
     const [audioFileName, setAudioFileName] = useState<string>('');
-    const [paymentAmount, setPaymentAmount] = useState<number>(0);
+    const [paymentAmount, setPaymentAmount] = useState<number>(25000);
     const [paymentProof, setPaymentProof] = useState<File | null>(null);
     const [paymentProofPreview, setPaymentProofPreview] = useState<string>('');
     const [paymentProofWebP, setPaymentProofWebP] = useState<string>('');
     const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
+    const [bookingOrderId, setBookingOrderId] = useState<string>('');
+    const [isPaid, setIsPaid] = useState(false);
+    const [mootaConfigured, setMootaConfigured] = useState(false);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    // Load workshop info if slug is provided
     useEffect(() => {
-        // Load available time slots when component mounts
-        const availableSlots = timeSlotService.getActiveTimeSlots();
-        setTimeSlots(availableSlots);
-    }, []);
+        const loadWorkshop = async () => {
+            setWorkshopLoading(true);
+            setWorkshopError(null);
+            
+            if (workshopSlug) {
+                const info = await workshopService.getPublicWorkshopInfo(workshopSlug);
+                if (info) {
+                    setWorkshop(info);
+                    // Load time slots for this workshop
+                    const slots = await workshopService.getWorkshopTimeSlots(info.id);
+                    setTimeSlots(slots.map(s => ({
+                        id: s.id,
+                        label: `${s.startTime} - ${s.endTime}`,
+                        startTime: s.startTime,
+                        endTime: s.endTime,
+                        maxBookings: s.maxBookings,
+                        isActive: s.isActive
+                    })));
+                    // Check Moota config for this workshop
+                    const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id);
+                    setMootaConfigured(!!mootaSettings);
+                } else {
+                    setWorkshopError('Workshop tidak ditemukan');
+                }
+            } else {
+                // Default workshop (backward compatibility)
+                const availableSlots = timeSlotService.getActiveTimeSlots();
+                setTimeSlots(availableSlots);
+                const settings = await mootaService.getActiveSettings();
+                setMootaConfigured(!!settings);
+            }
+            
+            setWorkshopLoading(false);
+        };
+        
+        loadWorkshop();
+    }, [workshopSlug]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -150,22 +195,27 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
 
     const handleStep1Submit = (e: React.FormEvent) => {
         e.preventDefault();
-        // Get default payment amount from QRIS service
-        const defaultAmount = qrisService.getDefaultAmount();
-        setPaymentAmount(defaultAmount || 25000); // Fallback to 25000 if no default
+        // Generate unique order ID for this booking
+        const orderId = `BK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        setBookingOrderId(orderId);
+        setPaymentAmount(25000); // Booking fee
         setStep(2);
     };
 
+    const handlePaymentComplete = (order?: any) => {
+        setIsPaid(true);
+        if (order) {
+            console.log('Payment confirmed via Moota:', order);
+        }
+        setStep(3);
+    };
+
     const handlePaymentSuccess = () => {
-        if (!paymentProof) {
-            alert('Please upload payment proof first');
+        if (!isPaid && !paymentProof) {
+            alert('Please complete payment or upload payment proof first');
             return;
         }
-        
-        // Simulating payment process
-        setTimeout(() => {
-            setStep(3);
-        }, 1000);
+        setStep(3);
     };
 
     const handleFinalSubmit = async (e: React.FormEvent) => {
@@ -192,9 +242,13 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
         onSubmit({ 
             ...formData, 
             audioBase64,
-            paymentMethod: 'QRIS',
+            paymentMethod: isPaid ? 'MOOTA' : 'TRANSFER',
             transferProofBase64: paymentProofBase64, // Reusing same field name
-            paymentAmount
+            paymentAmount,
+            orderId: bookingOrderId,
+            // Multi-tenant: include workshop info
+            workshopId: workshop?.id || null,
+            workshopSlug: workshop?.slug || workshopSlug || null,
         });
     };
 
@@ -205,10 +259,14 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-primary rounded-lg">
-                                <span className="material-symbols-outlined text-white text-xl">local_car_wash</span>
-                            </div>
-                            <h1 className="text-xl font-bold text-gray-900">ABE</h1>
+                            {workshop?.logoUrl ? (
+                                <img src={workshop.logoUrl} alt={workshop.name} className="h-10 w-10 rounded-lg object-cover" />
+                            ) : (
+                                <div className="p-2 bg-primary rounded-lg">
+                                    <span className="material-symbols-outlined text-white text-xl">local_car_wash</span>
+                                </div>
+                            )}
+                            <h1 className="text-xl font-bold text-gray-900">{workshop?.name || 'ABE'}</h1>
                         </div>
                         <button onClick={onBack} className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg text-sm font-medium hover:bg-amber-200">
                             Back
@@ -217,8 +275,52 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 </div>
             </nav>
 
-            {/* Main Content */}
+            {/* Loading State */}
+            {workshopLoading && (
+                <div className="flex items-center justify-center min-h-[60vh]">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                        <p className="text-gray-600">Memuat informasi bengkel...</p>
+                    </div>
+                </div>
+            )}
+
+            {/* Workshop Not Found Error */}
+            {workshopError && (
+                <div className="max-w-md mx-auto px-4 py-16 text-center">
+                    <div className="bg-red-50 rounded-full w-20 h-20 flex items-center justify-center mx-auto mb-6">
+                        <span className="material-symbols-outlined text-4xl text-red-500">error</span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Workshop Tidak Ditemukan</h2>
+                    <p className="text-gray-600 mb-6">{workshopError}</p>
+                    <button onClick={onBack} className="bg-primary text-white px-6 py-3 rounded-lg font-semibold hover:bg-primary/90">
+                        Kembali ke Beranda
+                    </button>
+                </div>
+            )}
+
+            {/* Main Content - only show if not loading and no error */}
+            {!workshopLoading && !workshopError && (
             <div className="max-w-2xl mx-auto px-4 py-8">
+                {/* Workshop Info Banner */}
+                {workshop && (
+                    <div className="bg-gradient-to-r from-primary/10 to-primary/5 rounded-xl p-4 mb-6 border border-primary/20">
+                        <div className="flex items-center gap-3">
+                            {workshop.logoUrl ? (
+                                <img src={workshop.logoUrl} alt={workshop.name} className="h-12 w-12 rounded-lg object-cover" />
+                            ) : (
+                                <div className="p-2 bg-primary rounded-lg">
+                                    <span className="material-symbols-outlined text-white">storefront</span>
+                                </div>
+                            )}
+                            <div>
+                                <h3 className="font-bold text-gray-900">{workshop.name}</h3>
+                                {workshop.address && <p className="text-sm text-gray-600">{workshop.address}</p>}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Progress Steps */}
                 <div className="flex items-center justify-center mb-8">
                     {[1, 2, 3].map(i => (
@@ -366,130 +468,140 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                         </div>
                     )}
 
-{/* STEP 2: QRIS Payment */}
+{/* STEP 2: Bank Transfer Payment via Moota */}
                     {step === 2 && (
                         <div className="p-6">
                             <div className="text-center mb-6">
-                                <h3 className="text-2xl font-bold text-gray-900 mb-1">QRIS Payment</h3>
+                                <h3 className="text-2xl font-bold text-gray-900 mb-1">Payment</h3>
                                 <p className="text-gray-600">{formData.vehicleModel} - Booking Fee</p>
-                                <div className="text-2xl font-bold text-primary mt-2">
-                                    {paymentAmount > 0 ? `Rp ${paymentAmount.toLocaleString('id-ID')}` : 'Rp 25,000'}
-                                </div>
                             </div>
 
-                            {/* Warning Message */}
-                            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                <div className="flex items-start space-x-3">
-                                    <span className="material-symbols-outlined text-yellow-600 mt-0.5">warning</span>
-                                    <div className="text-sm text-yellow-800">
-                                        <p className="font-semibold mb-1">⚠️ Penting - Simpan Bukti Pembayaran!</p>
-                                        <ul className="list-disc list-inside space-y-1">
-                                            <li>Screenshot atau foto bukti pembayaran QRIS</li>
-                                            <li>Simpan bukti setelah pembayaran berhasil</li>
-                                            <li>Upload bukti untuk melanjutkan proses booking</li>
-                                        </ul>
+                            {mootaConfigured ? (
+                                <>
+                                    {/* Moota Payment Component */}
+                                    <MootaPayment
+                                        amount={paymentAmount}
+                                        orderId={bookingOrderId}
+                                        customerName={formData.customerName}
+                                        customerPhone={formData.phone}
+                                        description={`Booking Fee - ${formData.vehicleModel} - ${formData.licensePlate}`}
+                                        onPaymentComplete={handlePaymentComplete}
+                                        onPaymentExpired={() => {
+                                            alert('Payment expired. Please try again.');
+                                            setStep(1);
+                                        }}
+                                        onCancel={() => setStep(1)}
+                                        autoCheck={true}
+                                        checkInterval={30}
+                                    />
+                                    
+                                    {/* Info text */}
+                                    <div className="text-center space-y-2 mt-6">
+                                        <p className="text-sm text-gray-600">Booking fee akan dipotong dari total servis.</p>
+                                        <p className="text-xs text-gray-500">Refundable up to 24 hours before appointment.</p>
                                     </div>
-                                </div>
-                            </div>
+                                </>
+                            ) : (
+                                /* Fallback: Manual Upload if Moota not configured */
+                                <>
+                                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="flex items-start space-x-3">
+                                            <span className="material-symbols-outlined text-blue-600 mt-0.5">info</span>
+                                            <div className="text-sm text-blue-800">
+                                                <p className="font-semibold mb-1">Transfer Bank</p>
+                                                <p>Silakan transfer ke rekening bengkel dan upload bukti pembayaran.</p>
+                                                <p className="mt-2 font-bold text-lg">Total: Rp {paymentAmount.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                    </div>
 
-                            {/* QRIS Payment Component */}
-                            <div className="mb-6">
-                                <QRISPayment
-                                    amount={paymentAmount || 25000}
-                                    description={`Booking Fee - ${formData.customerName}`}
-                                    onPaymentComplete={() => {
-                                        // Don't proceed automatically, wait for proof upload
-                                        document.getElementById('proof-upload-section')?.scrollIntoView({ behavior: 'smooth' });
-                                    }}
-                                    onCancel={() => setStep(1)}
-                                />
-                            </div>
+                                    {/* Upload Payment Proof Section */}
+                                    <div className="border-t border-gray-200 pt-6">
+                                        <div className="mb-4">
+                                            <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Bukti Pembayaran</h4>
+                                            <p className="text-sm text-gray-600">
+                                                Setelah melakukan pembayaran, silakan upload screenshot/foto bukti pembayaran
+                                            </p>
+                                        </div>
 
-                            {/* Upload Payment Proof Section */}
-                            <div id="proof-upload-section" className="border-t border-gray-200 pt-6">
-                                <div className="mb-4">
-                                    <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Bukti Pembayaran</h4>
-                                    <p className="text-sm text-gray-600">
-                                        Setelah melakukan pembayaran QRIS, silakan upload screenshot/foto bukti pembayaran
-                                    </p>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={handlePaymentProofUpload}
-                                            className="hidden"
-                                            id="payment-proof-upload"
-                                        />
-                                        <label htmlFor="payment-proof-upload" className="cursor-pointer">
-                                            {paymentProofPreview ? (
-                                                <div className="space-y-3">
-                                                    <img
-                                                        src={paymentProofPreview}
-                                                        alt="Payment proof preview"
-                                                        className="max-w-full max-h-48 mx-auto rounded-lg shadow-md"
-                                                    />
-                                                    <p className="text-sm text-gray-600">
-                                                        {paymentProof?.name} (Converted to WebP)
-                                                    </p>
-                                                    <p className="text-xs text-primary">Click to change image</p>
-                                                </div>
-                                            ) : (
-                                                <div className="space-y-3">
-                                                    <span className="material-symbols-outlined text-4xl text-gray-400">cloud_upload</span>
-                                                    <div>
-                                                        <p className="text-lg font-medium text-gray-700">Upload Bukti Pembayaran</p>
-                                                        <p className="text-sm text-gray-500">JPG, PNG, GIF up to 5MB</p>
-                                                        <p className="text-xs text-gray-400 mt-1">Auto-converted to WebP format</p>
+                                        <div className="space-y-4">
+                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={handlePaymentProofUpload}
+                                                    className="hidden"
+                                                    id="payment-proof-upload"
+                                                />
+                                                <label htmlFor="payment-proof-upload" className="cursor-pointer">
+                                                    {paymentProofPreview ? (
+                                                        <div className="space-y-3">
+                                                            <img
+                                                                src={paymentProofPreview}
+                                                                alt="Payment proof preview"
+                                                                className="max-w-full max-h-48 mx-auto rounded-lg shadow-md"
+                                                            />
+                                                            <p className="text-sm text-gray-600">
+                                                                {paymentProof?.name} (Converted to WebP)
+                                                            </p>
+                                                            <p className="text-xs text-primary">Click to change image</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-3">
+                                                            <span className="material-symbols-outlined text-4xl text-gray-400">cloud_upload</span>
+                                                            <div>
+                                                                <p className="text-lg font-medium text-gray-700">Upload Bukti Pembayaran</p>
+                                                                <p className="text-sm text-gray-500">JPG, PNG, GIF up to 5MB</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </label>
+                                            </div>
+                                            
+                                            {paymentProof && (
+                                                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="material-symbols-outlined text-green-600">check_circle</span>
+                                                        <span className="text-sm font-medium text-green-800">Payment proof uploaded</span>
                                                     </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPaymentProof(null);
+                                                            setPaymentProofPreview('');
+                                                            setPaymentProofWebP('');
+                                                        }}
+                                                        className="text-green-600 hover:text-green-800"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">close</span>
+                                                    </button>
                                                 </div>
                                             )}
-                                        </label>
-                                    </div>
-                                    
-                                    {paymentProof && (
-                                        <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
-                                            <div className="flex items-center space-x-3">
-                                                <span className="material-symbols-outlined text-green-600">check_circle</span>
-                                                <span className="text-sm font-medium text-green-800">Payment proof uploaded & converted to WebP</span>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setPaymentProof(null);
-                                                    setPaymentProofPreview('');
-                                                    setPaymentProofWebP('');
-                                                }}
-                                                className="text-green-600 hover:text-green-800"
-                                            >
-                                                <span className="material-symbols-outlined text-sm">close</span>
-                                            </button>
                                         </div>
-                                    )}
-                                </div>
 
-                                {/* Continue Button */}
-                                <button
-                                    type="button"
-                                    onClick={handlePaymentSuccess}
-                                    disabled={!paymentProof}
-                                    className={`w-full mt-6 py-4 rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2 ${
-                                        paymentProof
-                                            ? 'bg-primary text-white hover:bg-primary/90'
-                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                    }`}
-                                >
-                                    <span className="material-symbols-outlined">verified</span>
-                                    {paymentProof ? 'Continue to Next Step' : 'Upload Payment Proof to Continue'}
-                                </button>
-                            </div>
+                                        {/* Continue Button */}
+                                        <button
+                                            type="button"
+                                            onClick={handlePaymentSuccess}
+                                            disabled={!paymentProof}
+                                            className={`w-full mt-6 py-4 rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2 ${
+                                                paymentProof
+                                                    ? 'bg-primary text-white hover:bg-primary/90'
+                                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                            }`}
+                                        >
+                                            <span className="material-symbols-outlined">verified</span>
+                                            {paymentProof ? 'Continue to Next Step' : 'Upload Payment Proof to Continue'}
+                                        </button>
+                                    </div>
 
-                            <div className="text-center space-y-2 mt-6">
-                                <p className="text-sm text-gray-600">Booking fee akan dipotong dari total servis.</p>
-                                <p className="text-xs text-gray-500">Refundable up to 24 hours before appointment.</p>
-                            </div>
+                                    <div className="flex justify-start mt-4">
+                                        <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
+                                            ← Back
+                                        </button>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 
@@ -592,6 +704,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                     )}
                 </div>
             </div>
+            )}
         </div>
     );
 };

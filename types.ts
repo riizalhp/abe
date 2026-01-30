@@ -5,6 +5,42 @@ export enum Role {
   MEKANIK = 'MEKANIK',
 }
 
+export enum SubscriptionTier {
+  FREE = 'FREE',
+  BASIC = 'BASIC',
+  PRO = 'PRO',
+  ENTERPRISE = 'ENTERPRISE',
+}
+
+export interface Workshop {
+  id: string;
+  name: string;
+  slug: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  logoUrl?: string;
+  description?: string;
+  settings?: Record<string, any>;
+  isActive: boolean;
+  subscriptionTier: SubscriptionTier;
+  subscriptionExpiresAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WorkshopInvitation {
+  id: string;
+  workshopId: string;
+  email: string;
+  role: Role;
+  inviteCode: string;
+  invitedBy?: string;
+  acceptedAt?: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export enum QueueStatus {
   WAITING = 'MENUNGGU',
   PROCESS = 'DIKERJAKAN',
@@ -33,6 +69,7 @@ export enum PaymentMethod {
   QRIS = 'QRIS',
   TRANSFER = 'TRANSFER',
   DEBIT = 'DEBIT',
+  MOOTA = 'MOOTA', // Bank transfer via Moota
 }
 
 export enum ReminderStatus {
@@ -47,10 +84,13 @@ export interface User {
   name: string;
   username: string; // Added for login
   password?: string; // Added for login
+  email?: string;
   role: Role;
   avatar: string;
   specialization?: string; // For mechanics
   status?: 'ACTIVE' | 'BUSY' | 'OFF';
+  workshopId?: string; // Multi-tenant: workshop this user belongs to
+  isOwner?: boolean; // Whether this user owns the workshop
 }
 
 export interface ServiceRecord {
@@ -76,6 +116,7 @@ export interface ServiceRecord {
   finishTime?: string;
   paymentMethod?: PaymentMethod;
   mechanicRating?: number; // 1-5
+  workshopId?: string; // Multi-tenant
 }
 
 export interface ServiceReminder {
@@ -90,6 +131,7 @@ export interface ServiceReminder {
   status: ReminderStatus;
   messageTemplate?: string;
   sentAt?: string;
+  workshopId?: string; // Multi-tenant
 }
 
 export interface BookingRecord {
@@ -110,8 +152,22 @@ export interface BookingRecord {
   transferProofBase64?: string; // For bank transfer proof
   paymentAmount?: number;
   createdAt: string;
+  workshopId?: string; // Multi-tenant: which workshop this booking belongs to
+  workshopSlug?: string; // URL slug of the workshop
 }
 
 export interface ViewState {
-  currentView: 'LOGIN' | 'DASHBOARD' | 'FRONT_OFFICE' | 'QUEUE' | 'MECHANIC' | 'CASHIER' | 'CRM' | 'FINANCE' | 'LOGS' | 'HISTORY' | 'REMINDER' | 'GUEST_BOOKING' | 'GUEST_TRACKING' | 'BOOKING_ADMIN' | 'USERS';
+  currentView: 'LOGIN' | 'DASHBOARD' | 'FRONT_OFFICE' | 'QUEUE' | 'MECHANIC' | 'CASHIER' | 'CRM' | 'FINANCE' | 'LOGS' | 'HISTORY' | 'REMINDER' | 'GUEST_BOOKING' | 'GUEST_TRACKING' | 'BOOKING_ADMIN' | 'USERS' | 'MOOTA_SETTINGS' | 'WORKSHOP_SETTINGS';
+}
+
+export interface TimeSlot {
+  id: string;
+  workshopId: string;
+  dayOfWeek: number; // 0=Sunday, 6=Saturday
+  startTime: string;
+  endTime: string;
+  maxBookings: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }

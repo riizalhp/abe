@@ -1,25 +1,38 @@
 import React, { useState } from 'react';
-import { User } from '../../types';
+import { Link, useNavigate } from 'react-router-dom';
+import { useWorkshop } from '../../lib/WorkshopContext';
+import { Loader2 } from 'lucide-react';
 
 interface LoginPageProps {
-    onLogin: (user: User) => void;
     onBack: () => void;
-    users: User[];
 }
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBack, users }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onBack }) => {
+    const navigate = useNavigate();
+    const { login } = useWorkshop();
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const user = users.find(u => u.username === username && u.password === password);
-        if (user) {
-            onLogin(user);
-        } else {
-            setError('Invalid username or password');
+        setError('');
+        setLoading(true);
+
+        try {
+            const result = await login(username, password);
+            if (result.success) {
+                navigate('/dashboard');
+            } else {
+                setError(result.error || 'Username atau password salah');
+                setPassword('');
+            }
+        } catch (err: any) {
+            setError(err.message || 'Gagal login');
             setPassword('');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -85,13 +98,31 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onBack, users }) => {
                         </div>
                     )}
 
-                    <button type="submit" className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2">
-                        <span>Sign In</span>
-                        <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                    <button type="submit" disabled={loading} className="w-full h-12 bg-primary hover:bg-primary-dark text-white font-bold rounded-lg shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {loading ? (
+                            <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                <span>Logging in...</span>
+                            </>
+                        ) : (
+                            <>
+                                <span>Sign In</span>
+                                <span className="material-symbols-outlined text-lg">arrow_forward</span>
+                            </>
+                        )}
                     </button>
 
-                    <div className="text-center pt-4">
+                    <div className="text-center pt-4 space-y-2">
                         <p className="text-xs text-slate-500">Default: owner / 123</p>
+                        <div className="flex items-center justify-center gap-2">
+                            <span className="text-sm text-slate-500">Belum punya workshop?</span>
+                            <Link 
+                                to="/register" 
+                                className="text-sm font-semibold text-primary hover:text-primary-dark transition-colors"
+                            >
+                                Daftar Sekarang
+                            </Link>
+                        </div>
                     </div>
                 </form>
 
