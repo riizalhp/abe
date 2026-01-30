@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { BookingRecord, BookingStatus } from '../../types';
+import { supabase } from '../../lib/supabase';
 
 interface GuestTrackingProps {
     bookings: BookingRecord[];
@@ -8,29 +10,137 @@ interface GuestTrackingProps {
 }
 
 const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initialCode }) => {
+    const { workshopSlug } = useParams<{ workshopSlug: string }>();
     const [searchCode, setSearchCode] = useState(initialCode || '');
     const [foundBooking, setFoundBooking] = useState<BookingRecord | null>(null);
     const [searched, setSearched] = useState(false);
     const [showSuccess, setShowSuccess] = useState(!!initialCode);
+    const [workshopBookings, setWorkshopBookings] = useState<BookingRecord[]>([]);
+    const [workshop, setWorkshop] = useState<{ name: string; slug: string } | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch workshop-specific bookings
+    useEffect(() => {
+        const fetchWorkshopData = async () => {
+            if (!workshopSlug) {
+                setLoading(false);
+                return;
+            }
+
+            try {
+                setLoading(true);
+                
+                // Get workshop info
+                const { data: workshopData, error: workshopError } = await supabase
+                    .from('workshops')
+                    .select('id, name, slug')
+                    .eq('slug', workshopSlug)
+                    .eq('is_active', true)
+                    .single();
+
+                if (workshopError) {
+                    console.error('Error fetching workshop:', workshopError);
+                    setLoading(false);
+                    return;
+                }
+
+                if (workshopData) {
+                    setWorkshop({ name: workshopData.name, slug: workshopData.slug });
+
+                    // Get bookings for this workshop
+                    const { data: bookingsData, error: bookingsError } = await supabase
+                        .from('bookings')
+                        .select(`
+                            id,
+                            booking_code,
+                            customer_name,
+                            phone,
+                            vehicle_model,
+                            license_plate,
+                            service_date,
+                            service_time,
+                            status,
+                            notes,
+                            created_at
+                        `)
+                        .eq('workshop_id', workshopData.id)
+                        .order('created_at', { ascending: false });
+
+                    if (bookingsError) {
+                        console.error('Error fetching bookings:', bookingsError);
+                    } else {
+                        const mappedBookings: BookingRecord[] = (bookingsData || []).map(data => ({
+                            id: data.id,
+                            bookingCode: data.booking_code,
+                            customerName: data.customer_name,
+                            phone: data.phone,
+                            vehicleModel: data.vehicle_model,
+                            licensePlate: data.license_plate,
+                            serviceDate: data.service_date,
+                            serviceTime: data.service_time,
+                            status: data.status as BookingStatus,
+                            notes: data.notes,
+                            createdAt: data.created_at,
+                            workshopId: workshopData.id,
+                            workshopSlug: workshopData.slug
+                        }));
+                        setWorkshopBookings(mappedBookings);
+                    }
+                }
+            } catch (error) {
+                console.error('Error in fetchWorkshopData:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchWorkshopData();
+    }, [workshopSlug]);
 
     useEffect(() => {
-        if (initialCode) {
-            const booking = bookings.find(b => b.bookingCode === initialCode);
+        if (initialCode && workshopBookings.length > 0) {
+            const booking = workshopBookings.find(b => b.bookingCode === initialCode);
             if (booking) {
                 setFoundBooking(booking);
                 setSearched(true);
                 setShowSuccess(true);
             }
         }
-    }, [initialCode, bookings]);
+    }, [initialCode, workshopBookings]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setShowSuccess(false);
-        const booking = bookings.find(b => b.bookingCode === searchCode.trim().toUpperCase());
+        const booking = workshopBookings.find(b => b.bookingCode === searchCode.trim().toUpperCase());
         setFoundBooking(booking || null);
         setSearched(true);
     };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading workshop...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!workshop) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <div className="text-center p-8">
+                    <span className="material-symbols-outlined text-6xl text-gray-400 mb-4">error_outline</span>
+                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Workshop Not Found</h2>
+                    <p className="text-gray-600 mb-4">The workshop "{workshopSlug}" could not be found or is not active.</p>
+                    <button onClick={onBack} className="bg-primary text-white px-6 py-3 rounded-lg font-medium hover:bg-primary/90">
+                        Back to Home
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -42,7 +152,10 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                             <div className="p-2 bg-primary rounded-lg">
                                 <span className="material-symbols-outlined text-white text-xl">local_car_wash</span>
                             </div>
-                            <h1 className="text-xl font-bold text-gray-900">ABE</h1>
+                            <div>
+                                <h1 className="text-xl font-bold text-gray-900">{workshop.name}</h1>
+                                <p className="text-xs text-gray-500">Order Tracking</p>
+                            </div>
                         </div>
                         <button onClick={onBack} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90">
                             Back to App
@@ -68,7 +181,7 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                 {!foundBooking && (
                     <div className="text-center mb-8">
                         <h2 className="text-2xl font-bold text-gray-900 mb-2">Track Your Service</h2>
-                        <p className="text-gray-600 mb-6">Enter your booking code to check the status</p>
+                        <p className="text-gray-600 mb-6">Enter your booking code to check the status at <span className="font-semibold">{workshop.name}</span></p>
                         
                         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 max-w-md mx-auto">
                             <form onSubmit={handleSearch} className="space-y-4">

@@ -15,6 +15,7 @@ export interface WorkshopData {
   logo_url?: string;
   description?: string;
   settings?: Record<string, any>;
+  payment_method: string;
   is_active: boolean;
   subscription_tier: string;
   subscription_expires_at?: string;
@@ -79,6 +80,7 @@ function toWorkshop(row: WorkshopData): Workshop {
     logoUrl: row.logo_url,
     description: row.description,
     settings: row.settings,
+    paymentMethod: row.payment_method as any,
     isActive: row.is_active,
     subscriptionTier: row.subscription_tier as SubscriptionTier,
     subscriptionExpiresAt: row.subscription_expires_at,
@@ -205,7 +207,7 @@ export async function createWorkshop(
 // Update workshop
 export async function updateWorkshop(
   workshopId: string,
-  updates: Partial<CreateWorkshopInput & { logoUrl?: string; isActive?: boolean }>
+  updates: Partial<CreateWorkshopInput & { logoUrl?: string; isActive?: boolean; paymentMethod?: string }>
 ): Promise<{ success: boolean; error: string | null }> {
   const dbUpdates: Record<string, any> = {};
   
@@ -216,6 +218,7 @@ export async function updateWorkshop(
   if (updates.description !== undefined) dbUpdates.description = updates.description;
   if (updates.logoUrl !== undefined) dbUpdates.logo_url = updates.logoUrl;
   if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
+  if (updates.paymentMethod !== undefined) dbUpdates.payment_method = updates.paymentMethod;
 
   const { error } = await supabase
     .from('workshops')

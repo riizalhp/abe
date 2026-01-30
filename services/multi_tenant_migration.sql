@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS workshops (
     logo_url TEXT,
     description TEXT,
     settings JSONB DEFAULT '{}'::jsonb, -- Workshop-specific settings
+    payment_method TEXT DEFAULT 'qris_static' CHECK (payment_method IN ('qris_static', 'qris_dynamic', 'moota', 'manual')), -- Payment preference
     is_active BOOLEAN DEFAULT true,
     subscription_tier TEXT DEFAULT 'FREE' CHECK (subscription_tier IN ('FREE', 'BASIC', 'PRO', 'ENTERPRISE')),
     subscription_expires_at TIMESTAMPTZ,
@@ -851,6 +852,19 @@ COMMENT ON COLUMN users.is_owner IS 'Whether this user is the owner of their wor
 COMMENT ON COLUMN workshops.slug IS 'URL-friendly identifier used in /booking/:slug';
 
 COMMENT ON COLUMN workshops.settings IS 'JSON object for workshop-specific configuration';
+
+COMMENT ON COLUMN workshops.payment_method IS 'Payment method preference: qris_static, qris_dynamic, moota, or manual';
+
+-- ============================================
+-- 22. ADD PAYMENT_METHOD COLUMN TO EXISTING WORKSHOPS
+-- ============================================
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'workshops' AND column_name = 'payment_method') THEN
+        ALTER TABLE workshops ADD COLUMN payment_method TEXT DEFAULT 'qris_static' CHECK (payment_method IN ('qris_static', 'qris_dynamic', 'moota', 'manual'));
+    END IF;
+END $$;
 
 -- ============================================
 -- MIGRATION COMPLETE

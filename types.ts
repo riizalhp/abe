@@ -12,6 +12,13 @@ export enum SubscriptionTier {
   ENTERPRISE = 'ENTERPRISE',
 }
 
+export enum PaymentMethod {
+  QRIS_STATIC = 'qris_static',
+  QRIS_DYNAMIC = 'qris_dynamic',
+  MOOTA = 'moota',
+  MANUAL = 'manual',
+}
+
 export interface Workshop {
   id: string;
   name: string;
@@ -22,6 +29,7 @@ export interface Workshop {
   logoUrl?: string;
   description?: string;
   settings?: Record<string, any>;
+  paymentMethod: PaymentMethod;
   isActive: boolean;
   subscriptionTier: SubscriptionTier;
   subscriptionExpiresAt?: string;
@@ -62,14 +70,6 @@ export enum ServiceWeight {
   LIGHT = 'RINGAN',
   MEDIUM = 'SEDANG',
   HEAVY = 'BERAT',
-}
-
-export enum PaymentMethod {
-  CASH = 'CASH',
-  QRIS = 'QRIS',
-  TRANSFER = 'TRANSFER',
-  DEBIT = 'DEBIT',
-  MOOTA = 'MOOTA', // Bank transfer via Moota
 }
 
 export enum ReminderStatus {

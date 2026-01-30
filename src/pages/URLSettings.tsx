@@ -1,22 +1,80 @@
 import React, { useState } from 'react';
 import { useWorkshop } from '../../lib/WorkshopContext';
+import { PaymentMethod } from '../../types';
+import workshopService from '../../services/workshopService';
 
 export const URLSettings: React.FC = () => {
-  const { currentWorkshop } = useWorkshop();
+  const { currentWorkshop, refreshWorkshop } = useWorkshop();
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>(
+    currentWorkshop?.paymentMethod || PaymentMethod.QRIS_STATIC
+  );
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const bookingUrl = currentWorkshop 
     ? `${window.location.origin}/booking/${currentWorkshop.slug}` 
     : '';
 
   const trackingUrl = currentWorkshop 
-    ? `${window.location.origin}/tracking` 
+    ? `${window.location.origin}/tracking/${currentWorkshop.slug}` 
     : '';
 
   const handleCopyUrl = (url: string) => {
     navigator.clipboard.writeText(url);
     setCopiedUrl(true);
     setTimeout(() => setCopiedUrl(false), 2000);
+  };
+
+  const handlePaymentMethodUpdate = async (method: PaymentMethod) => {
+    if (!currentWorkshop) return;
+    
+    setIsUpdating(true);
+    try {
+      await workshopService.updateWorkshop(currentWorkshop.id, {
+        paymentMethod: method
+      });
+      setSelectedPaymentMethod(method);
+      await refreshWorkshop();
+      alert('Payment method updated successfully!');
+    } catch (error) {
+      console.error('Failed to update payment method:', error);
+      alert('Failed to update payment method');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const getPaymentMethodInfo = (method: PaymentMethod) => {
+    switch (method) {
+      case PaymentMethod.QRIS_STATIC:
+        return {
+          name: 'QRIS Static',
+          description: 'Fixed QR code with preset amount',
+          icon: 'qr_code_2',
+          color: 'blue'
+        };
+      case PaymentMethod.QRIS_DYNAMIC:
+        return {
+          name: 'QRIS Dynamic',
+          description: 'Generate QR code with custom amount',
+          icon: 'qr_code_scanner',
+          color: 'purple'
+        };
+      case PaymentMethod.MOOTA:
+        return {
+          name: 'Moota Integration',
+          description: 'Auto-sync with bank account via Moota',
+          icon: 'account_balance',
+          color: 'green'
+        };
+      case PaymentMethod.MANUAL:
+        return {
+          name: 'Manual Payment',
+          description: 'Cash or manual bank transfer',
+          icon: 'payments',
+          color: 'orange'
+        };
+    }
   };
 
   if (!currentWorkshop) {
@@ -65,6 +123,87 @@ export const URLSettings: React.FC = () => {
             {currentWorkshop.description}
           </p>
         )}
+      </div>
+
+      {/* Payment Method Selection */}
+      <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="material-symbols-outlined text-indigo-600 dark:text-indigo-400 text-2xl">settings</span>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Payment Method Settings</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Choose how customers will pay for services on your booking page
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          {Object.values(PaymentMethod).map((method) => {
+            const info = getPaymentMethodInfo(method);
+            const isSelected = selectedPaymentMethod === method;
+            const colorMap = {
+              blue: { bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-500', text: 'text-blue-600 dark:text-blue-400' },
+              purple: { bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-500', text: 'text-purple-600 dark:text-purple-400' },
+              green: { bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-green-500', text: 'text-green-600 dark:text-green-400' },
+              orange: { bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-500', text: 'text-orange-600 dark:text-orange-400' }
+            };
+            const colors = colorMap[info.color as keyof typeof colorMap];
+            
+            return (
+              <div
+                key={method}
+                className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  isSelected
+                    ? `${colors.border} ${colors.bg}`
+                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                }`}
+                onClick={() => setSelectedPaymentMethod(method)}
+              >
+                <div className="flex items-start gap-3">
+                  <span className={`material-symbols-outlined ${colors.text} text-2xl`}>
+                    {info.icon}
+                  </span>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-900 dark:text-white mb-1">
+                      {info.name}
+                    </h3>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                      {info.description}
+                    </p>
+                  </div>
+                  {isSelected && (
+                    <span className="material-symbols-outlined text-blue-600 dark:text-blue-400">
+                      check_circle
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700">
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            Current: <span className="font-medium">{getPaymentMethodInfo(currentWorkshop?.paymentMethod || PaymentMethod.QRIS_STATIC).name}</span>
+          </div>
+          <button
+            onClick={() => handlePaymentMethodUpdate(selectedPaymentMethod)}
+            disabled={isUpdating || selectedPaymentMethod === currentWorkshop?.paymentMethod}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+          >
+            {isUpdating ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Updating...
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-lg">save</span>
+                Update Payment Method
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Booking URL Section */}

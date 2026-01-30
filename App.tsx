@@ -199,7 +199,12 @@ function AppContent() {
       });
       setBookings([...bookings, newBooking]);
       setActiveTrackingCode(newBooking.bookingCode);
-      navigate('/tracking');
+      // Navigate to tracking with workshop slug if available
+      if (workshops.length > 0) {
+        navigate(`/tracking/${workshops[0].slug}`);
+      } else {
+        navigate('/tracking/default-workshop');
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to submit booking");
@@ -297,10 +302,6 @@ function AppContent() {
           element={<GuestBookingWrapper onSubmit={handleGuestBookingSubmit} />}
         />
         <Route
-          path="/tracking"
-          element={<GuestTrackingWrapper bookings={bookings} initialCode={activeTrackingCode} setCode={setActiveTrackingCode} />}
-        />
-        <Route
           path="/tracking/:workshopSlug"
           element={<GuestTrackingWrapper bookings={bookings} initialCode={activeTrackingCode} setCode={setActiveTrackingCode} />}
         />
@@ -388,7 +389,7 @@ function App() {
 // Helper Wrappers to handle Navigation props
 const LandingPageWrapper = () => {
   const navigate = useNavigate();
-  return <LandingPage onLoginClick={() => navigate('/login')} onGuestBooking={() => navigate('/booking/new')} onGuestTracking={() => navigate('/tracking')} />;
+  return <LandingPage onLoginClick={() => navigate('/login')} onGuestBooking={() => navigate('/booking/new')} onGuestTracking={() => navigate('/tracking/default-workshop')} />;
 };
 
 const LoginWrapper = () => {

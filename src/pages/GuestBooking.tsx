@@ -2,9 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { analyzeAudioDiagnosis } from '../../services/geminiService';
 import { MootaPayment } from '../components/MootaPayment';
+import { QRISUploader } from '../components/QRISUploader';
+import { QRISPayment } from '../components/QRISPayment';
 import mootaService from '../../services/mootaService';
+import qrisService from '../../services/qrisService';
 import timeSlotService, { TimeSlot } from '../../services/timeSlotService';
 import workshopService, { PublicWorkshopInfo } from '../../services/workshopService';
+import { PaymentMethod } from '../../types';
 
 interface GuestBookingProps {
     onSubmit: (data: any) => void;
@@ -468,15 +472,17 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                         </div>
                     )}
 
-{/* STEP 2: Bank Transfer Payment via Moota */}
+{/* STEP 2: Dynamic Payment based on Workshop Settings */}
                     {step === 2 && (
                         <div className="p-6">
                             <div className="text-center mb-6">
                                 <h3 className="text-2xl font-bold text-gray-900 mb-1">Payment</h3>
                                 <p className="text-gray-600">{formData.vehicleModel} - Booking Fee</p>
+                                <p className="text-lg font-bold text-primary mt-2">Rp {paymentAmount.toLocaleString('id-ID')}</p>
                             </div>
 
-                            {mootaConfigured ? (
+                            {/* Dynamic Payment Method */}
+                            {workshop?.payment_method === PaymentMethod.MOOTA && mootaConfigured ? (
                                 <>
                                     {/* Moota Payment Component */}
                                     <MootaPayment
@@ -495,21 +501,56 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                         checkInterval={30}
                                     />
                                     
-                                    {/* Info text */}
                                     <div className="text-center space-y-2 mt-6">
                                         <p className="text-sm text-gray-600">Booking fee akan dipotong dari total servis.</p>
                                         <p className="text-xs text-gray-500">Refundable up to 24 hours before appointment.</p>
                                     </div>
                                 </>
+                            ) : workshop?.payment_method === PaymentMethod.QRIS_DYNAMIC ? (
+                                <>
+                                    {/* QRIS Dynamic Payment */}
+                                    <QRISPayment
+                                        amount={paymentAmount}
+                                        orderId={bookingOrderId}
+                                        description={`Booking Fee - ${formData.vehicleModel}`}
+                                        onPaymentSuccess={handlePaymentComplete}
+                                        onCancel={() => setStep(1)}
+                                    />
+                                    
+                                    <div className="text-center space-y-2 mt-6">
+                                        <p className="text-sm text-gray-600">Scan QRIS code dengan aplikasi mobile banking Anda.</p>
+                                        <p className="text-xs text-gray-500">Booking fee akan dipotong dari total servis.</p>
+                                    </div>
+                                </>
+                            ) : workshop?.payment_method === PaymentMethod.QRIS_STATIC ? (
+                                <>
+                                    {/* QRIS Static Payment */}
+                                    <QRISUploader
+                                        onQrDecode={(data, error) => {
+                                            if (error) {
+                                                alert(`QRIS Error: ${error}`);
+                                                return;
+                                            }
+                                            // Handle static QRIS payment
+                                            handlePaymentSuccess();
+                                        }}
+                                        maxFileSize={5}
+                                    />
+                                    
+                                    <div className="text-center space-y-2 mt-6">
+                                        <p className="text-sm text-gray-600">Scan QRIS code yang tersedia di bengkel atau upload foto QRIS.</p>
+                                        <p className="text-xs text-gray-500">Pastikan transfer sesuai nominal yang tertera.</p>
+                                    </div>
+                                </>
                             ) : (
-                                /* Fallback: Manual Upload if Moota not configured */
+                                /* Manual Payment */
                                 <>
                                     <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                         <div className="flex items-start space-x-3">
                                             <span className="material-symbols-outlined text-blue-600 mt-0.5">info</span>
                                             <div className="text-sm text-blue-800">
-                                                <p className="font-semibold mb-1">Transfer Bank</p>
-                                                <p>Silakan transfer ke rekening bengkel dan upload bukti pembayaran.</p>
+                                                <p className="font-semibold mb-1">Manual Payment</p>
+                                                <p>Silakan lakukan pembayaran sesuai instruksi bengkel dan upload bukti pembayaran.</p>
                                                 <p className="mt-2 font-bold text-lg">Total: Rp {paymentAmount.toLocaleString('id-ID')}</p>
                                             </div>
                                         </div>
