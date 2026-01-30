@@ -8,11 +8,26 @@ interface DashboardProps {
     stats: {
         revenue: any[],
         status: any[],
-        summary: any
+        summary: any,
+        growth?: number  // Add growth percentage
     };
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
+    // Format currency for Indonesian Rupiah
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR',
+            minimumFractionDigits: 0
+        }).format(amount);
+    };
+
+    // Calculate growth percentage (default to 0 if not provided)
+    const growthPercentage = stats.growth || 0;
+    const isPositiveGrowth = growthPercentage > 0;
+    const isNegativeGrowth = growthPercentage < 0;
+    const isNoChange = growthPercentage === 0;
 
     return (
         <div className="space-y-4 md:space-y-6 max-w-full overflow-hidden">
@@ -23,12 +38,26 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
                         <div className="p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-primary group-hover:bg-primary group-hover:text-white transition-colors">
                             <span className="material-symbols-outlined">payments</span>
                         </div>
-                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[10px]">arrow_upward</span> 12%
-                        </span>
+                        {isNoChange ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[10px]">trending_flat</span> 
+                                0.0%
+                            </span>
+                        ) : (
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
+                                isPositiveGrowth 
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                                    : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                            }`}>
+                                <span className="material-symbols-outlined text-[10px]">
+                                    {isPositiveGrowth ? 'arrow_upward' : 'arrow_downward'}
+                                </span> 
+                                {Math.abs(growthPercentage).toFixed(1)}%
+                            </span>
+                        )}
                     </div>
                     <h4 className="text-slate-500 text-sm font-medium mb-1">Revenue Today</h4>
-                    <p className="text-2xl font-bold text-slate-900 dark:text-white">Rp {(stats.summary.revenueToday || 0).toLocaleString('id-ID')}</p>
+                    <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(stats.summary.revenueToday || 0)}</p>
                 </div>
 
                 <div className="bg-white dark:bg-[#1A2230] p-4 md:p-6 rounded-xl border border-border-light dark:border-slate-800 shadow-soft hover:shadow-hover transition-shadow group cursor-default">
@@ -70,10 +99,25 @@ const Dashboard: React.FC<DashboardProps> = ({ stats }) => {
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                            <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} dy={10} />
-                            <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                            <XAxis 
+                                dataKey="time" 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#94a3b8', fontSize: 12 }} 
+                                dy={10}
+                                label={{ value: 'Time (24H)', position: 'insideBottom', offset: -5, style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                            />
+                            <YAxis 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#94a3b8', fontSize: 12 }}
+                                tickFormatter={(value) => `${(value / 1000)}K`}
+                                label={{ value: 'Revenue (IDR)', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#64748b', fontSize: 12 } }}
+                            />
                             <RechartsTooltip
                                 contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
+                                formatter={(value: number) => [formatCurrency(value), 'Revenue']}
+                                labelFormatter={(label) => `Time: ${label}`}
                             />
                             <Area type="monotone" dataKey="amount" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorRev)" />
                         </AreaChart>

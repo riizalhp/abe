@@ -207,37 +207,57 @@ function AppContent() {
   };
 
   // Dashboard Stats (Calculated from real data)
-  const dashboardStats = {
-    revenue: history.reduce((acc, curr) => {
-      // Filter for today only
-      if (curr.finishTime && new Date(curr.finishTime).toDateString() === new Date().toDateString()) {
-        const hour = new Date(curr.finishTime).getHours();
-        const timeKey = `${hour.toString().padStart(2, '0')}:00`;
-        const existing = acc.find(a => a.time === timeKey);
-        if (existing) {
-          existing.amount += (curr.totalCost || 0);
-        } else {
-          acc.push({ time: timeKey, amount: (curr.totalCost || 0) });
+  const dashboardStats = (() => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    // Calculate today's revenue
+    const revenueToday = history
+      .filter(h => h.finishTime && new Date(h.finishTime).toDateString() === today.toDateString())
+      .reduce((sum, h) => sum + (h.totalCost || 0), 0);
+
+    // Calculate yesterday's revenue for growth comparison
+    const revenueYesterday = history
+      .filter(h => h.finishTime && new Date(h.finishTime).toDateString() === yesterday.toDateString())
+      .reduce((sum, h) => sum + (h.totalCost || 0), 0);
+
+    // Calculate growth percentage
+    const growthPercentage = revenueYesterday > 0 
+      ? ((revenueToday - revenueYesterday) / revenueYesterday) * 100 
+      : revenueToday > 0 ? 100 : 0;
+
+    return {
+      revenue: history.reduce((acc, curr) => {
+        // Filter for today only
+        if (curr.finishTime && new Date(curr.finishTime).toDateString() === today.toDateString()) {
+          const hour = new Date(curr.finishTime).getHours();
+          const timeKey = `${hour.toString().padStart(2, '0')}:00`;
+          const existing = acc.find(a => a.time === timeKey);
+          if (existing) {
+            existing.amount += (curr.totalCost || 0);
+          } else {
+            acc.push({ time: timeKey, amount: (curr.totalCost || 0) });
+          }
         }
-      }
-      return acc;
-    }, [] as { time: string, amount: number }[]).sort((a, b) => a.time.localeCompare(b.time)),
-    status: [
-      { name: 'Finished', value: history.filter(q => q.status === QueueStatus.FINISHED).length },
-      { name: 'Working', value: queue.filter(q => q.status === QueueStatus.PROCESS).length },
-      { name: 'Waiting', value: queue.filter(q => q.status === QueueStatus.WAITING).length },
-      { name: 'Pending', value: bookings.filter(b => b.status === BookingStatus.PENDING).length },
-    ],
-    summary: {
-      revenueToday: history
-        .filter(h => h.finishTime && new Date(h.finishTime).toDateString() === new Date().toDateString())
-        .reduce((sum, h) => sum + (h.totalCost || 0), 0),
-      vehiclesToday:
-        history.filter(h => h.entryTime && new Date(h.entryTime).toDateString() === new Date().toDateString()).length +
-        queue.filter(q => q.entryTime && new Date(q.entryTime).toDateString() === new Date().toDateString()).length,
-      rating: history.length > 0 ? history.reduce((sum, h) => sum + (h.mechanicRating || 0), 0) / history.length : 0
-    }
-  };
+        return acc;
+      }, [] as { time: string, amount: number }[]).sort((a, b) => a.time.localeCompare(b.time)),
+      status: [
+        { name: 'Finished', value: history.filter(q => q.status === QueueStatus.FINISHED).length },
+        { name: 'Working', value: queue.filter(q => q.status === QueueStatus.PROCESS).length },
+        { name: 'Waiting', value: queue.filter(q => q.status === QueueStatus.WAITING).length },
+        { name: 'Pending', value: bookings.filter(b => b.status === BookingStatus.PENDING).length },
+      ],
+      summary: {
+        revenueToday,
+        vehiclesToday:
+          history.filter(h => h.entryTime && new Date(h.entryTime).toDateString() === today.toDateString()).length +
+          queue.filter(q => q.entryTime && new Date(q.entryTime).toDateString() === today.toDateString()).length,
+        rating: history.length > 0 ? history.reduce((sum, h) => sum + (h.mechanicRating || 0), 0) / history.length : 0
+      },
+      growth: growthPercentage
+    };
+  })();
 
   // Show loading state while checking auth
   if (isLoading) {
