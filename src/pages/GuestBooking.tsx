@@ -58,16 +58,25 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 const info = await workshopService.getPublicWorkshopInfo(workshopSlug);
                 if (info) {
                     setWorkshop(info);
-                    // Load time slots for this workshop
+                    // Load time slots for this workshop from database
                     const slots = await workshopService.getWorkshopTimeSlots(info.id);
-                    setTimeSlots(slots.map(s => ({
-                        id: s.id,
-                        label: `${s.startTime} - ${s.endTime}`,
-                        startTime: s.startTime,
-                        endTime: s.endTime,
-                        maxBookings: s.maxBookings,
-                        isActive: s.isActive
-                    })));
+                    
+                    // If no slots in database, use default slots from timeSlotService
+                    if (slots.length > 0) {
+                        setTimeSlots(slots.map(s => ({
+                            id: s.id,
+                            time: s.startTime,
+                            label: `${s.startTime} - ${s.endTime}`,
+                            maxBookings: s.maxBookings,
+                            isActive: s.isActive,
+                            dayOfWeek: []
+                        })));
+                    } else {
+                        // Fallback to default time slots
+                        const defaultSlots = timeSlotService.getActiveTimeSlots();
+                        setTimeSlots(defaultSlots);
+                    }
+                    
                     // Check Moota config for this workshop
                     const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id);
                     setMootaConfigured(!!mootaSettings);

@@ -19,9 +19,32 @@ export const reminderService = {
             query = query.eq('workshop_id', workshopId);
         }
         
-        // Filter by branch_id if branch is selected
-        if (branchId) {
-            query = query.eq('branch_id', branchId);
+        // Try with branch_id filter, fallback without it if column doesn't exist
+        try {
+            if (branchId) {
+                const { data, error } = await query.eq('branch_id', branchId);
+                if (error) {
+                    // If branch_id column doesn't exist, retry without it
+                    if (error.message.includes('branch_id does not exist')) {
+                        console.warn('branch_id column not found in reminders table, fetching without branch filter');
+                        const { data: fallbackData, error: fallbackError } = await supabase
+                            .from('reminders')
+                            .select('*')
+                            .eq('workshop_id', workshopId || '')
+                            .order('next_service_date', { ascending: true });
+                        if (fallbackError) throw fallbackError;
+                        return (fallbackData || []).map(mapToReminder);
+                    }
+                    throw error;
+                }
+                return (data || []).map(mapToReminder);
+            }
+        } catch (e: any) {
+            if (e.message?.includes('branch_id does not exist')) {
+                console.warn('branch_id column not found, fetching all reminders for workshop');
+            } else {
+                throw e;
+            }
         }
 
         const { data, error } = await query;
@@ -35,10 +58,11 @@ export const reminderService = {
         const branchId = getStoredBranchId();
         const dbReminder = mapToDbReminder(reminder);
         
-        // Always set workshop_id and branch_id
+        // Always set workshop_id
         if (workshopId) {
             dbReminder.workshop_id = workshopId;
         }
+        // Only set branch_id if it exists (will be ignored if column doesn't exist)
         if (branchId) {
             dbReminder.branch_id = branchId;
         }

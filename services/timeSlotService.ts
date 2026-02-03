@@ -32,13 +32,13 @@ class TimeSlotService {
   getAllTimeSlots(): TimeSlot[] {
     try {
       const storageKey = this.getStorageKey();
-      const stored = localStorage.getItem(storageKey);
-      if (!stored) {
+      // Use SecurityUtils.getSecureItem to match saveToStorage
+      const data = SecurityUtils.getSecureItem(storageKey) as TimeSlot[] | null;
+      if (!data || data.length === 0) {
         // Return default slots if none saved
         return this.getDefaultTimeSlots();
       }
       
-      const data = JSON.parse(stored);
       return data.map((item: any) => ({
         ...item,
       }));

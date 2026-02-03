@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import timeSlotService, { TimeSlot } from '../../services/timeSlotService';
+import { useBranch } from '../../lib/BranchContext';
 
 export const TimeSlotSettings: React.FC = () => {
+  const { currentBranch } = useBranch();
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [isAddingSlot, setIsAddingSlot] = useState(false);
   const [editingSlot, setEditingSlot] = useState<TimeSlot | null>(null);
@@ -119,9 +121,17 @@ export const TimeSlotSettings: React.FC = () => {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Time Slot Settings</h1>
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900">Time Slot Settings</h1>
+          {currentBranch && (
+            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+              {currentBranch.name}
+            </span>
+          )}
+        </div>
         <p className="text-gray-600">
           Manage available booking time slots for customers.
+          {currentBranch && <span className="text-blue-600"> (Pengaturan untuk cabang: {currentBranch.name})</span>}
         </p>
       </div>
 

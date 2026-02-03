@@ -36,19 +36,26 @@ export const userService = {
             throw new Error('Missing required fields: name, username, or role');
         }
 
-        const dbUser = {
+        const dbUser: any = {
             name: user.name,
             username: user.username,
             password: user.password || '123',
-            email: user.email,
             role: user.role,
             avatar: user.avatar || '',
-            specialization: user.specialization,
             status: user.status || 'ACTIVE',
-            workshop_id: workshopId, // Always set workshop_id
-            branch_id: branchId, // Set branch_id
             is_owner: user.isOwner || false,
         };
+        
+        // Only add optional fields if they have values
+        if (user.specialization) {
+            dbUser.specialization = user.specialization;
+        }
+        if (workshopId) {
+            dbUser.workshop_id = workshopId;
+        }
+        if (branchId) {
+            dbUser.branch_id = branchId;
+        }
 
         console.log('Attempting to insert user:', dbUser);
         const { data, error } = await supabase
@@ -59,6 +66,10 @@ export const userService = {
 
         if (error) {
             console.error('Supabase error:', error);
+            // Provide user-friendly error messages
+            if (error.code === '23505') {
+                throw new Error('Username sudah digunakan. Silakan pilih username lain.');
+            }
             throw new Error(`Database error: ${error.message} (Code: ${error.code})`);
         }
         
