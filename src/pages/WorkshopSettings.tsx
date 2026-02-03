@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import workshopService, { 
   getWorkshopById, 
   getWorkshopStaff, 
@@ -8,12 +8,14 @@ import workshopService, {
   updateWorkshop
 } from '../../services/workshopService';
 import { Workshop, User, Role } from '../../types';
+import { useBranch } from '../../lib/BranchContext';
 
 interface WorkshopSettingsProps {
   currentUser: User;
 }
 
 const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
+  const { currentBranch } = useBranch();
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const [staff, setStaff] = useState<User[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
@@ -36,11 +38,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  useEffect(() => {
-    loadWorkshopData();
-  }, [currentUser]);
-
-  const loadWorkshopData = async () => {
+  const loadWorkshopData = useCallback(async () => {
     setIsLoading(true);
     try {
       if (currentUser.workshopId) {
@@ -68,7 +66,19 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUser.workshopId]);
+
+  useEffect(() => {
+    loadWorkshopData();
+    
+    // Listen for branch change
+    const handleBranchChange = () => {
+      loadWorkshopData();
+    };
+    
+    window.addEventListener('branchChanged', handleBranchChange);
+    return () => window.removeEventListener('branchChanged', handleBranchChange);
+  }, [loadWorkshopData]);
 
   const handleSaveWorkshop = async () => {
     if (!workshop) return;
@@ -179,8 +189,18 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     <div className="p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Pengaturan Workshop</h1>
-        <p className="text-gray-600">Kelola informasi dan staff workshop Anda</p>
+        <div className="flex items-center gap-3 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900">Pengaturan Workshop</h1>
+          {currentBranch && (
+            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+              {currentBranch.name}
+            </span>
+          )}
+        </div>
+        <p className="text-gray-600">
+          Kelola informasi dan staff workshop Anda
+          {currentBranch && <span className="text-blue-600"> (Cabang: {currentBranch.name})</span>}
+        </p>
       </div>
 
       {/* Message */}

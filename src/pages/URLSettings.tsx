@@ -1,15 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useWorkshop } from '../../lib/WorkshopContext';
+import { useBranch } from '../../lib/BranchContext';
 import { PaymentMethod } from '../../types';
 import workshopService from '../../services/workshopService';
 
 export const URLSettings: React.FC = () => {
   const { currentWorkshop, refreshWorkshop } = useWorkshop();
+  const { currentBranch } = useBranch();
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>(
     currentWorkshop?.paymentMethod || PaymentMethod.QRIS_STATIC
   );
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Reload data when branch changes
+  const loadData = useCallback(() => {
+    if (currentWorkshop) {
+      setSelectedPaymentMethod(currentWorkshop.paymentMethod || PaymentMethod.QRIS_STATIC);
+    }
+  }, [currentWorkshop]);
+
+  useEffect(() => {
+    loadData();
+    
+    const handleBranchChange = () => {
+      loadData();
+    };
+    
+    window.addEventListener('branchChanged', handleBranchChange);
+    return () => window.removeEventListener('branchChanged', handleBranchChange);
+  }, [loadData]);
 
   const bookingUrl = currentWorkshop 
     ? `${window.location.origin}/booking/${currentWorkshop.slug}` 
@@ -97,9 +117,17 @@ export const URLSettings: React.FC = () => {
           <span className="material-symbols-outlined text-blue-600 dark:text-blue-400 text-2xl">link</span>
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">URL Settings</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">URL Settings</h1>
+            {currentBranch && (
+              <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
+                {currentBranch.name}
+              </span>
+            )}
+          </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Manage your public booking and tracking URLs
+            {currentBranch && <span className="text-blue-600"> (Cabang: {currentBranch.name})</span>}
           </p>
         </div>
       </div>
