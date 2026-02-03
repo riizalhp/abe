@@ -37,7 +37,7 @@ import GuestTracking from './src/pages/GuestTracking';
 
 // Inner App component that uses the context
 function AppContent() {
-  const { currentUser, isAuthenticated, isLoading, logout } = useWorkshop();
+  const { currentUser, currentWorkshop, isAuthenticated, isLoading, logout } = useWorkshop();
   const [users, setUsers] = useState<User[]>([]);
   const [queue, setQueue] = useState<ServiceRecord[]>([]);
   const [history, setHistory] = useState<ServiceRecord[]>([]);
@@ -145,9 +145,10 @@ function AppContent() {
       });
       setQueue([...queue, newRecord]);
       alert(`Ticket Created: ${newRecord.ticketNumber}`);
-    } catch (e) {
-      console.error(e);
-      alert("Failed to create ticket");
+    } catch (e: any) {
+      console.error('Failed to create ticket:', e);
+      // Show detailed error message (e.g., duplicate plate validation)
+      alert(e.message || "Failed to create ticket. Please try again.");
     }
   };
 
@@ -200,8 +201,8 @@ function AppContent() {
       setBookings([...bookings, newBooking]);
       setActiveTrackingCode(newBooking.bookingCode);
       // Navigate to tracking with workshop slug if available
-      if (workshops.length > 0) {
-        navigate(`/tracking/${workshops[0].slug}`);
+      if (currentWorkshop?.slug) {
+        navigate(`/tracking/${currentWorkshop.slug}`);
       } else {
         navigate('/tracking/default-workshop');
       }

@@ -3,7 +3,46 @@ import { supabase } from '../lib/supabase';
 import { ServiceRecord, QueueStatus } from '../types';
 import { getStoredWorkshopId } from '../lib/WorkshopContext';
 
+// Status yang dianggap sebagai tiket aktif (belum selesai)
+const ACTIVE_STATUSES = [QueueStatus.WAITING, QueueStatus.PROCESS, QueueStatus.PENDING];
+
 export const serviceRecordService = {
+    /**
+     * Check if a license plate has an active service ticket
+     * Returns the active ticket if found, null otherwise
+     */
+    async checkActiveTicket(licensePlate: string): Promise<ServiceRecord | null> {
+        const workshopId = getStoredWorkshopId();
+        
+        // Normalize license plate (uppercase, remove extra spaces)
+        const normalizedPlate = licensePlate.toUpperCase().replace(/\s+/g, ' ').trim();
+        
+        let query = supabase
+            .from('service_records')
+            .select('*')
+            .ilike('license_plate', normalizedPlate)
+            .in('status', ACTIVE_STATUSES)
+            .limit(1);
+        
+        // Filter by workshop_id if user is logged in
+        if (workshopId) {
+            query = query.eq('workshop_id', workshopId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error checking active ticket:', error);
+            return null;
+        }
+
+        if (data && data.length > 0) {
+            return mapToServiceRecord(data[0]);
+        }
+
+        return null;
+    },
+
     async getQueue(): Promise<ServiceRecord[]> {
         const workshopId = getStoredWorkshopId();
         
@@ -53,6 +92,18 @@ export const serviceRecordService = {
 
     async create(record: Partial<ServiceRecord>): Promise<ServiceRecord> {
         const workshopId = getStoredWorkshopId();
+        
+        // Validate: Check for duplicate active ticket with same license plate
+        if (record.licensePlate) {
+            const activeTicket = await this.checkActiveTicket(record.licensePlate);
+            if (activeTicket) {
+                throw new Error(
+                    `Kendaraan dengan plat ${record.licensePlate} masih memiliki tiket aktif (${activeTicket.ticketNumber}). ` +
+                    `Selesaikan tiket tersebut terlebih dahulu sebelum membuat tiket baru.`
+                );
+            }
+        }
+        
         const dbRecord = mapToDbRecord(record);
         
         // Always set workshop_id
