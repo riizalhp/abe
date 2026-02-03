@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { SecurityUtils } from '../lib/security';
+import { getStoredWorkshopId } from '../lib/WorkshopContext';
+import { getStoredBranchId } from '../lib/BranchContext';
 
 // Moota API Configuration
 const MOOTA_API_BASE_URL = 'https://app.moota.co/api/v2';
@@ -172,28 +174,46 @@ class MootaService {
     }
 
     try {
+      const branchId = getStoredBranchId();
+      const workshopId = getStoredWorkshopId();
+      
       // Deactivate existing settings if new one is active
       if (settings.isActive) {
-        await supabase
+        let updateQuery = supabase
           .from(this.TABLE_NAME)
           .update({ is_active: false })
           .eq('is_active', true);
+        
+        if (branchId) {
+          updateQuery = updateQuery.eq('branch_id', branchId);
+        }
+        
+        await updateQuery;
+      }
+
+      const insertData: any = {
+        access_token: settings.accessToken,
+        bank_account_id: settings.bankAccountId,
+        bank_account_name: SecurityUtils.sanitizeInput(settings.bankAccountName),
+        account_number: settings.accountNumber,
+        bank_type: settings.bankType,
+        secret_token: settings.secretToken,
+        webhook_url: settings.webhookUrl,
+        unique_code_start: settings.uniqueCodeStart,
+        unique_code_end: settings.uniqueCodeEnd,
+        is_active: settings.isActive
+      };
+      
+      if (branchId) {
+        insertData.branch_id = branchId;
+      }
+      if (workshopId) {
+        insertData.workshop_id = workshopId;
       }
 
       const { data, error } = await supabase
         .from(this.TABLE_NAME)
-        .insert({
-          access_token: settings.accessToken,
-          bank_account_id: settings.bankAccountId,
-          bank_account_name: SecurityUtils.sanitizeInput(settings.bankAccountName),
-          account_number: settings.accountNumber,
-          bank_type: settings.bankType,
-          secret_token: settings.secretToken,
-          webhook_url: settings.webhookUrl,
-          unique_code_start: settings.uniqueCodeStart,
-          unique_code_end: settings.uniqueCodeEnd,
-          is_active: settings.isActive
-        })
+        .insert(insertData)
         .select()
         .single();
 
@@ -211,11 +231,18 @@ class MootaService {
 
   async getActiveSettings(): Promise<MootaSettings | null> {
     try {
-      const { data, error } = await supabase
+      const branchId = getStoredBranchId();
+      
+      let query = supabase
         .from(this.TABLE_NAME)
         .select('*')
-        .eq('is_active', true)
-        .single();
+        .eq('is_active', true);
+      
+      if (branchId) {
+        query = query.eq('branch_id', branchId);
+      }
+      
+      const { data, error } = await query.single();
 
       if (error || !data) return null;
 
@@ -228,10 +255,18 @@ class MootaService {
 
   async getAllSettings(): Promise<MootaSettings[]> {
     try {
-      const { data, error } = await supabase
+      const branchId = getStoredBranchId();
+      
+      let query = supabase
         .from(this.TABLE_NAME)
         .select('*')
         .order('created_at', { ascending: false });
+      
+      if (branchId) {
+        query = query.eq('branch_id', branchId);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
@@ -244,11 +279,19 @@ class MootaService {
 
   async updateSettings(id: string, updates: Partial<MootaSettings>): Promise<void> {
     try {
+      const branchId = getStoredBranchId();
+      
       if (updates.isActive) {
-        await supabase
+        let updateQuery = supabase
           .from(this.TABLE_NAME)
           .update({ is_active: false })
           .eq('is_active', true);
+        
+        if (branchId) {
+          updateQuery = updateQuery.eq('branch_id', branchId);
+        }
+        
+        await updateQuery;
       }
 
       const updateData: any = {};
@@ -263,10 +306,16 @@ class MootaService {
       if (updates.uniqueCodeEnd !== undefined) updateData.unique_code_end = updates.uniqueCodeEnd;
       if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
 
-      const { error } = await supabase
+      let query = supabase
         .from(this.TABLE_NAME)
         .update(updateData)
         .eq('id', id);
+      
+      if (branchId) {
+        query = query.eq('branch_id', branchId);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
 
@@ -280,10 +329,18 @@ class MootaService {
 
   async deleteSettings(id: string): Promise<void> {
     try {
-      const { error } = await supabase
+      const branchId = getStoredBranchId();
+      
+      let query = supabase
         .from(this.TABLE_NAME)
         .delete()
         .eq('id', id);
+      
+      if (branchId) {
+        query = query.eq('branch_id', branchId);
+      }
+
+      const { error } = await query;
 
       if (error) throw error;
       this.accessToken = null;

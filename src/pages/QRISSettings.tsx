@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { QRISUploader } from '../components/QRISUploader';
 import qrisService, { QRISData } from '../../services/qrisService';
 
@@ -10,12 +10,7 @@ export const QRISSettings: React.FC = () => {
   const [defaultAmount, setDefaultAmount] = useState<number>(50000);
   const [amountError, setAmountError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadQRISData();
-    loadDefaultAmount();
-  }, []);
-
-  const loadQRISData = async () => {
+  const loadQRISData = useCallback(async () => {
     try {
       const data = await qrisService.getAllQRISData();
       setQrisData(data);
@@ -23,14 +18,28 @@ export const QRISSettings: React.FC = () => {
       console.error('Failed to load QRIS data:', error);
       setQrisData([]);
     }
-  };
+  }, []);
 
-  const loadDefaultAmount = () => {
+  const loadDefaultAmount = useCallback(() => {
     const savedAmount = localStorage.getItem('qris_default_amount');
     if (savedAmount) {
       setDefaultAmount(parseInt(savedAmount, 10));
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadQRISData();
+    loadDefaultAmount();
+    
+    // Listen for branch change
+    const handleBranchChange = () => {
+      loadQRISData();
+      loadDefaultAmount();
+    };
+    
+    window.addEventListener('branchChanged', handleBranchChange);
+    return () => window.removeEventListener('branchChanged', handleBranchChange);
+  }, [loadQRISData, loadDefaultAmount]);
 
   const handleQrDecode = async (data: string | null, error?: string) => {
     setUploadError(null);

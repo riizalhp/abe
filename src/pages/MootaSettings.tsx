@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import mootaService, { MootaSettings as MootaSettingsData, MootaBankAccount } from '../../services/mootaService';
 
 export const MootaSettingsPage: React.FC = () => {
@@ -25,11 +25,7 @@ export const MootaSettingsPage: React.FC = () => {
     isActive: true
   });
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
+  const loadSettings = useCallback(async () => {
     setIsLoading(true);
     try {
       const data = await mootaService.getAllSettings();
@@ -39,7 +35,35 @@ export const MootaSettingsPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadSettings();
+    
+    // Listen for branch change
+    const handleBranchChange = () => {
+      loadSettings();
+      // Reset form when branch changes
+      setFormData({
+        accessToken: '',
+        bankAccountId: '',
+        bankAccountName: '',
+        accountNumber: '',
+        bankType: '',
+        secretToken: '',
+        webhookUrl: '',
+        uniqueCodeStart: 1,
+        uniqueCodeEnd: 999,
+        isActive: true
+      });
+      setIsEditing(false);
+      setEditingId(null);
+      setBankAccounts([]);
+    };
+    
+    window.addEventListener('branchChanged', handleBranchChange);
+    return () => window.removeEventListener('branchChanged', handleBranchChange);
+  }, [loadSettings]);
 
   const testConnection = async () => {
     if (!formData.accessToken) {

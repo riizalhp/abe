@@ -2,10 +2,12 @@
 import { supabase } from '../lib/supabase';
 import { ServiceReminder, ReminderStatus } from '../types';
 import { getStoredWorkshopId } from '../lib/WorkshopContext';
+import { getStoredBranchId } from '../lib/BranchContext';
 
 export const reminderService = {
     async getAll(): Promise<ServiceReminder[]> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         
         let query = supabase
             .from('reminders')
@@ -16,6 +18,11 @@ export const reminderService = {
         if (workshopId) {
             query = query.eq('workshop_id', workshopId);
         }
+        
+        // Filter by branch_id if branch is selected
+        if (branchId) {
+            query = query.eq('branch_id', branchId);
+        }
 
         const { data, error } = await query;
 
@@ -25,11 +32,15 @@ export const reminderService = {
 
     async create(reminder: Partial<ServiceReminder>): Promise<ServiceReminder> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         const dbReminder = mapToDbReminder(reminder);
         
-        // Always set workshop_id
+        // Always set workshop_id and branch_id
         if (workshopId) {
             dbReminder.workshop_id = workshopId;
+        }
+        if (branchId) {
+            dbReminder.branch_id = branchId;
         }
         
         const { data, error } = await supabase

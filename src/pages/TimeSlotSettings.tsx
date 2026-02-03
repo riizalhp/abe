@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import timeSlotService, { TimeSlot } from '../../services/timeSlotService';
 
 export const TimeSlotSettings: React.FC = () => {
@@ -13,14 +13,30 @@ export const TimeSlotSettings: React.FC = () => {
   });
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadTimeSlots();
-  }, []);
-
-  const loadTimeSlots = () => {
+  const loadTimeSlots = useCallback(() => {
     const slots = timeSlotService.getAllTimeSlots();
     setTimeSlots(slots);
-  };
+  }, []);
+
+  useEffect(() => {
+    loadTimeSlots();
+    
+    // Listen for branch change
+    const handleBranchChange = () => {
+      loadTimeSlots();
+      setIsAddingSlot(false);
+      setEditingSlot(null);
+      setNewSlot({
+        time: '',
+        maxBookings: 5,
+        isActive: true,
+        dayOfWeek: []
+      });
+    };
+    
+    window.addEventListener('branchChanged', handleBranchChange);
+    return () => window.removeEventListener('branchChanged', handleBranchChange);
+  }, [loadTimeSlots]);
 
   const showSuccessMessage = (message: string) => {
     setSuccessMessage(message);

@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { User, Role } from '../types';
+import { getStoredBranchId } from '../lib/BranchContext';
+import { getStoredWorkshopId } from '../lib/WorkshopContext';
 
 export interface CreateStaffData {
   name: string;
@@ -102,12 +104,24 @@ export const staffService = {
       throw new Error('Missing required fields: name, username, or role');
     }
 
+    const branchId = getStoredBranchId();
+    const workshopId = getStoredWorkshopId();
+    
+    const insertData: any = {
+      ...user,
+      status: user.status || 'ACTIVE'
+    };
+    
+    if (branchId) {
+      insertData.branch_id = branchId;
+    }
+    if (workshopId) {
+      insertData.workshop_id = workshopId;
+    }
+
     const { data, error } = await supabase
       .from('users')
-      .insert([{
-        ...user,
-        status: user.status || 'ACTIVE'
-      }])
+      .insert([insertData])
       .select()
       .single();
 
@@ -123,10 +137,18 @@ export const staffService = {
    * Get all staff members
    */
   async getAll(): Promise<User[]> {
-    const { data, error } = await supabase
+    const branchId = getStoredBranchId();
+    
+    let query = supabase
       .from('users')
       .select('*')
       .order('name');
+    
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return data as User[];
@@ -136,11 +158,19 @@ export const staffService = {
    * Get staff by role
    */
   async getByRole(role: Role): Promise<User[]> {
-    const { data, error } = await supabase
+    const branchId = getStoredBranchId();
+    
+    let query = supabase
       .from('users')
       .select('*')
       .eq('role', role)
       .order('name');
+    
+    if (branchId) {
+      query = query.eq('branch_id', branchId);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     return data as User[];

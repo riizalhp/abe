@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import NewSidebar from '../components/NewSidebar';
+import BranchSelector from '../components/BranchSelector';
 import { User } from '../../types';
 
 interface MainLayoutProps {
@@ -24,7 +25,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ currentUser, onLogout }) => {
                             <p className="text-xs md:text-sm text-slate-500 hidden sm:block">Automotive Business Ecosystem</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
+                        {/* Branch Selector */}
+                        <BranchSelector className="hidden sm:block" />
+                        
                         <button className="size-10 rounded-lg flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors">
                             <span className="material-symbols-outlined">notifications</span>
                         </button>

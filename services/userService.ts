@@ -2,16 +2,23 @@
 import { supabase } from '../lib/supabase';
 import { User, Role } from '../types';
 import { getStoredWorkshopId } from '../lib/WorkshopContext';
+import { getStoredBranchId } from '../lib/BranchContext';
 
 export const userService = {
     async getAll(): Promise<User[]> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         
         let query = supabase.from('users').select('*');
         
         // Filter by workshop_id if user is logged in
         if (workshopId) {
             query = query.eq('workshop_id', workshopId);
+        }
+        
+        // Filter by branch_id if branch is selected
+        if (branchId) {
+            query = query.eq('branch_id', branchId);
         }
         
         const { data, error } = await query;
@@ -22,6 +29,7 @@ export const userService = {
 
     async create(user: Partial<User>): Promise<User> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         
         // Validate required fields
         if (!user.name || !user.username || !user.role) {
@@ -38,6 +46,7 @@ export const userService = {
             specialization: user.specialization,
             status: user.status || 'ACTIVE',
             workshop_id: workshopId, // Always set workshop_id
+            branch_id: branchId, // Set branch_id
             is_owner: user.isOwner || false,
         };
 

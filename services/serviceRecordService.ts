@@ -2,6 +2,7 @@
 import { supabase } from '../lib/supabase';
 import { ServiceRecord, QueueStatus } from '../types';
 import { getStoredWorkshopId } from '../lib/WorkshopContext';
+import { getStoredBranchId } from '../lib/BranchContext';
 
 // Status yang dianggap sebagai tiket aktif (belum selesai)
 const ACTIVE_STATUSES = [QueueStatus.WAITING, QueueStatus.PROCESS, QueueStatus.PENDING];
@@ -13,6 +14,7 @@ export const serviceRecordService = {
      */
     async checkActiveTicket(licensePlate: string): Promise<ServiceRecord | null> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         
         // Normalize license plate (uppercase, remove extra spaces)
         const normalizedPlate = licensePlate.toUpperCase().replace(/\s+/g, ' ').trim();
@@ -27,6 +29,11 @@ export const serviceRecordService = {
         // Filter by workshop_id if user is logged in
         if (workshopId) {
             query = query.eq('workshop_id', workshopId);
+        }
+        
+        // Filter by branch_id if branch is selected
+        if (branchId) {
+            query = query.eq('branch_id', branchId);
         }
 
         const { data, error } = await query;
@@ -45,6 +52,7 @@ export const serviceRecordService = {
 
     async getQueue(): Promise<ServiceRecord[]> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         
         let query = supabase
             .from('service_records')
@@ -56,6 +64,11 @@ export const serviceRecordService = {
         if (workshopId) {
             query = query.eq('workshop_id', workshopId);
         }
+        
+        // Filter by branch_id if branch is selected
+        if (branchId) {
+            query = query.eq('branch_id', branchId);
+        }
 
         const { data, error } = await query;
 
@@ -66,7 +79,8 @@ export const serviceRecordService = {
 
     async getHistory(): Promise<ServiceRecord[]> {
         const workshopId = getStoredWorkshopId();
-        console.log('Fetching service history for workshop:', workshopId);
+        const branchId = getStoredBranchId();
+        console.log('Fetching service history for workshop:', workshopId, 'branch:', branchId);
         
         let query = supabase
             .from('service_records')
@@ -77,6 +91,11 @@ export const serviceRecordService = {
         // Filter by workshop_id if user is logged in
         if (workshopId) {
             query = query.eq('workshop_id', workshopId);
+        }
+        
+        // Filter by branch_id if branch is selected
+        if (branchId) {
+            query = query.eq('branch_id', branchId);
         }
 
         const { data, error } = await query;
@@ -92,6 +111,7 @@ export const serviceRecordService = {
 
     async create(record: Partial<ServiceRecord>): Promise<ServiceRecord> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         
         // Validate: Check for duplicate active ticket with same license plate
         if (record.licensePlate) {
@@ -106,9 +126,12 @@ export const serviceRecordService = {
         
         const dbRecord = mapToDbRecord(record);
         
-        // Always set workshop_id
+        // Always set workshop_id and branch_id
         if (workshopId) {
             dbRecord.workshop_id = workshopId;
+        }
+        if (branchId) {
+            dbRecord.branch_id = branchId;
         }
         
         const { data, error } = await supabase

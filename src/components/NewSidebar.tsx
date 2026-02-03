@@ -92,6 +92,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
       roleRequired: [Role.OWNER]
     },
     { 
+      path: '/add-branch', 
+      label: 'Tambah Cabang', 
+      icon: 'add_business',
+      category: 'Administration',
+      roleRequired: [Role.OWNER]
+    },
+    { 
       path: '/url-settings', 
       label: 'URL Settings', 
       icon: 'link',

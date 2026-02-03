@@ -5,6 +5,7 @@ import { Settings } from 'lucide-react';
 import { Role, User, ServiceRecord, QueueStatus, ServiceReminder, BookingRecord, BookingStatus, ServiceWeight } from './types';
 import { SecurityUtils } from './lib/security';
 import { WorkshopProvider, useWorkshop } from './lib/WorkshopContext';
+import { BranchProvider } from './lib/BranchContext';
 import { userService } from './services/userService';
 import { serviceRecordService } from './services/serviceRecordService';
 import { bookingService } from './services/bookingService';
@@ -31,6 +32,7 @@ import URLSettings from './src/pages/URLSettings';
 import MootaSettingsPage from './src/pages/MootaSettings';
 import WorkshopSettings from './src/pages/WorkshopSettings';
 import JoinWorkshop from './src/pages/JoinWorkshop';
+import AddBranchPage from './src/pages/AddBranch';
 
 import GuestBooking from './src/pages/GuestBooking';
 import GuestTracking from './src/pages/GuestTracking';
@@ -43,6 +45,7 @@ function AppContent() {
   const [history, setHistory] = useState<ServiceRecord[]>([]);
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
   const [reminders, setReminders] = useState<ServiceReminder[]>([]);
+  const [branchChangeCounter, setBranchChangeCounter] = useState(0);
 
   // Guest Interaction State
   const [activeTrackingCode, setActiveTrackingCode] = useState('');
@@ -74,9 +77,20 @@ function AppContent() {
     } catch (e) {
       console.error("Failed to load data", e);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, branchChangeCounter]);
 
-  // Refresh data when user logs in/out
+  // Listen for branch changes
+  useEffect(() => {
+    const handleBranchChange = () => {
+      console.log('Branch changed, refreshing data...');
+      setBranchChangeCounter(prev => prev + 1);
+    };
+    
+    window.addEventListener('branchChanged', handleBranchChange);
+    return () => window.removeEventListener('branchChanged', handleBranchChange);
+  }, []);
+
+  // Refresh data when user logs in/out or branch changes
   useEffect(() => {
     refreshData();
     const interval = setInterval(refreshData, 30000); // Poll every 30s
@@ -366,6 +380,11 @@ function AppContent() {
               <WorkshopSettings currentUser={currentUser!} />
             </ProtectedRoute>
           } />
+          <Route path="/add-branch" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={[Role.OWNER]}>
+              <AddBranchPage />
+            </ProtectedRoute>
+          } />
           <Route path="/queue" element={<Queue queue={queue} updateStatus={updateQueueStatus} />} />
 
           {/* Fallback for under construction */}
@@ -381,7 +400,9 @@ function App() {
   return (
     <Router>
       <WorkshopProvider>
-        <AppContent />
+        <BranchProvider>
+          <AppContent />
+        </BranchProvider>
       </WorkshopProvider>
     </Router>
   );

@@ -1,5 +1,5 @@
 import { SecurityUtils } from '../lib/security';
-import { PerformanceUtils } from '../lib/performance';
+import { getStoredBranchId } from '../lib/BranchContext';
 
 // Time Slots Management Service
 export interface TimeSlot {
@@ -13,7 +13,7 @@ export interface TimeSlot {
 
 class TimeSlotService {
   private static instance: TimeSlotService;
-  private readonly STORAGE_KEY = 'time_slots_settings';
+  private readonly STORAGE_KEY_PREFIX = 'time_slots_settings';
 
   static getInstance(): TimeSlotService {
     if (!TimeSlotService.instance) {
@@ -22,10 +22,17 @@ class TimeSlotService {
     return TimeSlotService.instance;
   }
 
+  // Get storage key based on current branch
+  private getStorageKey(): string {
+    const branchId = getStoredBranchId();
+    return branchId ? `${this.STORAGE_KEY_PREFIX}_${branchId}` : this.STORAGE_KEY_PREFIX;
+  }
+
   // Get all time slots
   getAllTimeSlots(): TimeSlot[] {
     try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
+      const storageKey = this.getStorageKey();
+      const stored = localStorage.getItem(storageKey);
       if (!stored) {
         // Return default slots if none saved
         return this.getDefaultTimeSlots();
@@ -94,7 +101,7 @@ class TimeSlotService {
     };
     
     const updatedSlots = [...existingSlots, newSlot];
-    this.saveAllTimeSlots(updatedSlots);
+    this.saveToStorage(updatedSlots);
     
     return newSlot;
   }
@@ -107,27 +114,26 @@ class TimeSlotService {
     if (index === -1) return;
     
     slots[index] = { ...slots[index], ...updates };
-    this.saveAllTimeSlots(slots);
+    this.saveToStorage(slots);
   }
 
   // Delete time slot
   deleteTimeSlot(id: string): void {
     const slots = this.getAllTimeSlots();
     const filteredSlots = slots.filter(slot => slot.id !== id);
-    this.saveAllTimeSlots(filteredSlots);
+    this.saveToStorage(filteredSlots);
   }
 
   // Save all time slots to localStorage with encryption
   private saveToStorage(slots: TimeSlot[]): void {
     try {
+      const storageKey = this.getStorageKey();
       const validatedSlots = slots.map(slot => ({
         ...slot,
         label: SecurityUtils.sanitizeInput(slot.label),
         time: SecurityUtils.sanitizeInput(slot.time)
       }));
-      SecurityUtils.setSecureItem(this.STORAGE_KEY, validatedSlots);
-      // Update cache
-      PerformanceUtils.setCache('time_slots', validatedSlots, 300000); // 5 min
+      SecurityUtils.setSecureItem(storageKey, validatedSlots);
     } catch (error) {
       console.error('Failed to save time slots:', error);
     }
@@ -146,7 +152,7 @@ class TimeSlotService {
   // Reset to default slots
   resetToDefaults(): void {
     const defaultSlots = this.getDefaultTimeSlots();
-    this.saveAllTimeSlots(defaultSlots);
+    this.saveToStorage(defaultSlots);
   }
 }
 

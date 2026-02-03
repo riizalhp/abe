@@ -2,10 +2,12 @@
 import { supabase } from '../lib/supabase';
 import { BookingRecord, BookingStatus } from '../types';
 import { getStoredWorkshopId } from '../lib/WorkshopContext';
+import { getStoredBranchId } from '../lib/BranchContext';
 
 export const bookingService = {
     async getAll(): Promise<BookingRecord[]> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         
         let query = supabase
             .from('bookings')
@@ -16,6 +18,11 @@ export const bookingService = {
         if (workshopId) {
             query = query.eq('workshop_id', workshopId);
         }
+        
+        // Filter by branch_id if branch is selected
+        if (branchId) {
+            query = query.eq('branch_id', branchId);
+        }
 
         const { data, error } = await query;
 
@@ -25,6 +32,7 @@ export const bookingService = {
 
     async create(booking: Partial<BookingRecord>): Promise<BookingRecord> {
         const workshopId = getStoredWorkshopId();
+        const branchId = getStoredBranchId();
         const dbBooking = mapToDbBooking(booking);
         
         // Set workshop_id if logged in, or use provided workshopId
@@ -32,6 +40,11 @@ export const bookingService = {
             dbBooking.workshop_id = workshopId;
         } else if (booking.workshopId) {
             dbBooking.workshop_id = booking.workshopId;
+        }
+        
+        // Set branch_id if available
+        if (branchId) {
+            dbBooking.branch_id = branchId;
         }
         
         const { data, error } = await supabase
