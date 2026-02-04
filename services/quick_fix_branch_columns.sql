@@ -86,4 +86,17 @@ BEGIN
     END IF;
 END $$;
 
+-- 8. Tambah kolom branch_id ke workshop_invitations (jika tabel dan kolom belum ada)
+DO $$ 
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'workshop_invitations') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'workshop_invitations' AND column_name = 'branch_id'
+        ) THEN
+            ALTER TABLE workshop_invitations ADD COLUMN branch_id UUID;
+        END IF;
+    END IF;
+END $$;
+
 -- Selesai! Refresh browser setelah menjalankan ini

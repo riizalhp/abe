@@ -42,10 +42,11 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     setIsLoading(true);
     try {
       if (currentUser.workshopId) {
+        const branchId = activeBranch?.id;
         const [ws, staffList, invites] = await Promise.all([
           getWorkshopById(currentUser.workshopId),
-          getWorkshopStaff(currentUser.workshopId),
-          getWorkshopInvitations(currentUser.workshopId)
+          getWorkshopStaff(currentUser.workshopId, branchId),
+          getWorkshopInvitations(currentUser.workshopId, branchId)
         ]);
         
         if (ws) {
@@ -66,7 +67,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUser.workshopId]);
+  }, [currentUser.workshopId, activeBranch?.id]);
 
   useEffect(() => {
     loadWorkshopData();
@@ -120,13 +121,14 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
         workshop.id,
         inviteEmail,
         inviteRole,
-        currentUser.id
+        currentUser.id,
+        activeBranch?.id // Pass branch ID
       );
       
       if (result.inviteCode) {
         setInviteCode(result.inviteCode);
         setInviteEmail('');
-        setMessage({ type: 'success', text: 'Undangan berhasil dibuat!' });
+        setMessage({ type: 'success', text: `Undangan berhasil dibuat untuk cabang ${activeBranch?.name || 'utama'}!` });
         loadWorkshopData();
       } else {
         setMessage({ type: 'error', text: result.error || 'Gagal membuat undangan' });

@@ -237,13 +237,20 @@ export async function updateWorkshop(
 // Staff Management
 // ============================================
 
-// Get all staff for a workshop
-export async function getWorkshopStaff(workshopId: string): Promise<User[]> {
-  const { data, error } = await supabase
+// Get all staff for a workshop (optionally filtered by branch)
+export async function getWorkshopStaff(workshopId: string, branchId?: string): Promise<User[]> {
+  let query = supabase
     .from('users')
     .select('*')
     .eq('workshop_id', workshopId)
     .order('name');
+
+  // Filter by branch if provided
+  if (branchId) {
+    query = query.eq('branch_id', branchId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching workshop staff:', error);
@@ -260,6 +267,7 @@ export async function getWorkshopStaff(workshopId: string): Promise<User[]> {
     specialization: row.specialization,
     status: row.status,
     workshopId: row.workshop_id,
+    branchId: row.branch_id,
     isOwner: row.is_owner,
   }));
 }
@@ -269,7 +277,8 @@ export async function createStaffInvitation(
   workshopId: string,
   email: string,
   role: Role,
-  invitedBy: string
+  invitedBy: string,
+  branchId?: string
 ): Promise<{ inviteCode: string | null; error: string | null }> {
   if (role === Role.OWNER) {
     return { inviteCode: null, error: 'Cannot invite someone as OWNER' };
@@ -279,16 +288,23 @@ export async function createStaffInvitation(
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiry
 
+  const insertData: any = {
+    workshop_id: workshopId,
+    email,
+    role,
+    invite_code: inviteCode,
+    invited_by: invitedBy,
+    expires_at: expiresAt.toISOString(),
+  };
+
+  // Include branch_id if provided
+  if (branchId) {
+    insertData.branch_id = branchId;
+  }
+
   const { error } = await supabase
     .from('workshop_invitations')
-    .insert({
-      workshop_id: workshopId,
-      email,
-      role,
-      invite_code: inviteCode,
-      invited_by: invitedBy,
-      expires_at: expiresAt.toISOString(),
-    });
+    .insert(insertData);
 
   if (error) {
     console.error('Error creating invitation:', error);
@@ -298,15 +314,22 @@ export async function createStaffInvitation(
   return { inviteCode, error: null };
 }
 
-// Get pending invitations for a workshop
-export async function getWorkshopInvitations(workshopId: string): Promise<WorkshopInvitationData[]> {
-  const { data, error } = await supabase
+// Get pending invitations for a workshop (optionally filtered by branch)
+export async function getWorkshopInvitations(workshopId: string, branchId?: string): Promise<WorkshopInvitationData[]> {
+  let query = supabase
     .from('workshop_invitations')
     .select('*')
     .eq('workshop_id', workshopId)
     .is('accepted_at', null)
     .gt('expires_at', new Date().toISOString())
     .order('created_at', { ascending: false });
+
+  // Filter by branch if provided
+  if (branchId) {
+    query = query.eq('branch_id', branchId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     console.error('Error fetching invitations:', error);
