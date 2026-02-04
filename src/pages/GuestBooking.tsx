@@ -16,9 +16,11 @@ interface GuestBookingProps {
 }
 
 const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
-    const { workshopSlug } = useParams<{ workshopSlug?: string }>();
+    const { workshopSlug, branchCode } = useParams<{ workshopSlug?: string; branchCode?: string }>();
     
     const [step, setStep] = useState(1);
+    const [branchId, setBranchId] = useState<string | null>(null);
+    const [branchName, setBranchName] = useState<string | null>(null);
     const [workshop, setWorkshop] = useState<PublicWorkshopInfo | null>(null);
     const [workshopLoading, setWorkshopLoading] = useState(true);
     const [workshopError, setWorkshopError] = useState<string | null>(null);
@@ -48,7 +50,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const audioChunksRef = useRef<Blob[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Load workshop info if slug is provided
+    // Load workshop and branch info if slug is provided
     useEffect(() => {
         const loadWorkshop = async () => {
             setWorkshopLoading(true);
@@ -58,28 +60,58 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 const info = await workshopService.getPublicWorkshopInfo(workshopSlug);
                 if (info) {
                     setWorkshop(info);
-                    // Load time slots for this workshop from database
-                    const slots = await workshopService.getWorkshopTimeSlots(info.id);
                     
-                    // If no slots in database, use default slots from timeSlotService
-                    if (slots.length > 0) {
-                        setTimeSlots(slots.map(s => ({
-                            id: s.id,
-                            time: s.startTime,
-                            label: `${s.startTime} - ${s.endTime}`,
-                            maxBookings: s.maxBookings,
-                            isActive: s.isActive,
-                            dayOfWeek: []
-                        })));
+                    // If branchCode is provided, find the branch
+                    if (branchCode) {
+                        const branch = await workshopService.getBranchByCode(info.id, branchCode);
+                        if (branch) {
+                            setBranchId(branch.id);
+                            setBranchName(branch.name);
+                            
+                            // Load time slots for this specific branch
+                            const slots = await workshopService.getWorkshopTimeSlots(info.id, branch.id);
+                            if (slots.length > 0) {
+                                setTimeSlots(slots.map(s => ({
+                                    id: s.id,
+                                    time: s.startTime,
+                                    label: `${s.startTime} - ${s.endTime}`,
+                                    maxBookings: s.maxBookings,
+                                    isActive: s.isActive,
+                                    dayOfWeek: []
+                                })));
+                            } else {
+                                const defaultSlots = timeSlotService.getActiveTimeSlots();
+                                setTimeSlots(defaultSlots);
+                            }
+                            
+                            // Check Moota config for this branch
+                            const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id, branch.id);
+                            setMootaConfigured(!!mootaSettings);
+                        } else {
+                            setWorkshopError('Cabang tidak ditemukan');
+                        }
                     } else {
-                        // Fallback to default time slots
-                        const defaultSlots = timeSlotService.getActiveTimeSlots();
-                        setTimeSlots(defaultSlots);
+                        // No branch code - load default/all workshop slots
+                        const slots = await workshopService.getWorkshopTimeSlots(info.id);
+                        
+                        if (slots.length > 0) {
+                            setTimeSlots(slots.map(s => ({
+                                id: s.id,
+                                time: s.startTime,
+                                label: `${s.startTime} - ${s.endTime}`,
+                                maxBookings: s.maxBookings,
+                                isActive: s.isActive,
+                                dayOfWeek: []
+                            })));
+                        } else {
+                            const defaultSlots = timeSlotService.getActiveTimeSlots();
+                            setTimeSlots(defaultSlots);
+                        }
+                        
+                        // Check Moota config for this workshop
+                        const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id);
+                        setMootaConfigured(!!mootaSettings);
                     }
-                    
-                    // Check Moota config for this workshop
-                    const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id);
-                    setMootaConfigured(!!mootaSettings);
                 } else {
                     setWorkshopError('Workshop tidak ditemukan');
                 }
@@ -95,7 +127,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
         };
         
         loadWorkshop();
-    }, [workshopSlug]);
+    }, [workshopSlug, branchCode]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -259,9 +291,11 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
             transferProofBase64: paymentProofBase64, // Reusing same field name
             paymentAmount,
             orderId: bookingOrderId,
-            // Multi-tenant: include workshop info
+            // Multi-tenant: include workshop and branch info
             workshopId: workshop?.id || null,
             workshopSlug: workshop?.slug || workshopSlug || null,
+            branchId: branchId || null,
+            branchCode: branchCode || null,
         });
     };
 
@@ -328,6 +362,12 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                             )}
                             <div>
                                 <h3 className="font-bold text-gray-900">{workshop.name}</h3>
+                                {branchName && (
+                                    <p className="text-sm font-medium text-primary flex items-center gap-1">
+                                        <span className="material-symbols-outlined text-sm">location_on</span>
+                                        Cabang: {branchName}
+                                    </p>
+                                )}
                                 {workshop.address && <p className="text-sm text-gray-600">{workshop.address}</p>}
                             </div>
                         </div>

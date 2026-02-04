@@ -42,8 +42,10 @@ export const bookingService = {
             dbBooking.workshop_id = booking.workshopId;
         }
         
-        // Set branch_id if available
-        if (branchId) {
+        // Set branch_id - prioritize provided branchId from URL, then stored branchId
+        if ((booking as any).branchId) {
+            dbBooking.branch_id = (booking as any).branchId;
+        } else if (branchId) {
             dbBooking.branch_id = branchId;
         }
         

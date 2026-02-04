@@ -6,7 +6,7 @@ import workshopService from '../../services/workshopService';
 
 export const URLSettings: React.FC = () => {
   const { currentWorkshop, refreshWorkshop } = useWorkshop();
-  const { currentBranch } = useBranch();
+  const { activeBranch } = useBranch();
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>(
     currentWorkshop?.paymentMethod || PaymentMethod.QRIS_STATIC
@@ -31,12 +31,17 @@ export const URLSettings: React.FC = () => {
     return () => window.removeEventListener('branchChanged', handleBranchChange);
   }, [loadData]);
 
+  // Generate URLs with branch code if available
   const bookingUrl = currentWorkshop 
-    ? `${window.location.origin}/booking/${currentWorkshop.slug}` 
+    ? activeBranch 
+      ? `${window.location.origin}/booking/${currentWorkshop.slug}/${activeBranch.code}` 
+      : `${window.location.origin}/booking/${currentWorkshop.slug}` 
     : '';
 
   const trackingUrl = currentWorkshop 
-    ? `${window.location.origin}/tracking/${currentWorkshop.slug}` 
+    ? activeBranch 
+      ? `${window.location.origin}/tracking/${currentWorkshop.slug}/${activeBranch.code}` 
+      : `${window.location.origin}/tracking/${currentWorkshop.slug}` 
     : '';
 
   const handleCopyUrl = (url: string) => {
@@ -119,15 +124,15 @@ export const URLSettings: React.FC = () => {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">URL Settings</h1>
-            {currentBranch && (
+            {activeBranch && (
               <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
-                {currentBranch.name}
+                {activeBranch.name}
               </span>
             )}
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400">
             Manage your public booking and tracking URLs
-            {currentBranch && <span className="text-blue-600"> (Cabang: {currentBranch.name})</span>}
+            {activeBranch && <span className="text-blue-600"> (Cabang: {activeBranch.name})</span>}
           </p>
         </div>
       </div>

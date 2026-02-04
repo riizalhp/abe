@@ -3,7 +3,7 @@ import timeSlotService, { TimeSlot } from '../../services/timeSlotService';
 import { useBranch } from '../../lib/BranchContext';
 
 export const TimeSlotSettings: React.FC = () => {
-  const { currentBranch } = useBranch();
+  const { activeBranch } = useBranch();
   const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
   const [isAddingSlot, setIsAddingSlot] = useState(false);
   const [editingSlot, setEditingSlot] = useState<TimeSlot | null>(null);
@@ -22,7 +22,7 @@ export const TimeSlotSettings: React.FC = () => {
 
   useEffect(() => {
     loadTimeSlots();
-    
+
     // Listen for branch change
     const handleBranchChange = () => {
       loadTimeSlots();
@@ -35,7 +35,7 @@ export const TimeSlotSettings: React.FC = () => {
         dayOfWeek: []
       });
     };
-    
+
     window.addEventListener('branchChanged', handleBranchChange);
     return () => window.removeEventListener('branchChanged', handleBranchChange);
   }, [loadTimeSlots]);
@@ -59,7 +59,7 @@ export const TimeSlotSettings: React.FC = () => {
     }
 
     const label = timeSlotService.formatTime(newSlot.time);
-    
+
     timeSlotService.saveTimeSlot({
       ...newSlot,
       label,
@@ -85,7 +85,7 @@ export const TimeSlotSettings: React.FC = () => {
     if (!editingSlot) return;
 
     const label = timeSlotService.formatTime(editingSlot.time);
-    
+
     timeSlotService.updateTimeSlot(editingSlot.id, {
       ...editingSlot,
       label
@@ -123,15 +123,15 @@ export const TimeSlotSettings: React.FC = () => {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <h1 className="text-3xl font-bold text-gray-900">Time Slot Settings</h1>
-          {currentBranch && (
+          {activeBranch && (
             <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
-              {currentBranch.name}
+              {activeBranch.name}
             </span>
           )}
         </div>
         <p className="text-gray-600">
           Manage available booking time slots for customers.
-          {currentBranch && <span className="text-blue-600"> (Pengaturan untuk cabang: {currentBranch.name})</span>}
+          {activeBranch && <span className="text-blue-600"> (Pengaturan untuk cabang: {activeBranch.name})</span>}
         </p>
       </div>
 
@@ -154,7 +154,7 @@ export const TimeSlotSettings: React.FC = () => {
           <span className="material-symbols-outlined">add</span>
           Add Time Slot
         </button>
-        
+
         <button
           onClick={handleResetDefaults}
           className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors flex items-center gap-2"
@@ -181,7 +181,7 @@ export const TimeSlotSettings: React.FC = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Max Bookings</label>
                 <input
@@ -193,7 +193,7 @@ export const TimeSlotSettings: React.FC = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </div>
-              
+
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -207,7 +207,7 @@ export const TimeSlotSettings: React.FC = () => {
                 </label>
               </div>
             </div>
-            
+
             <div className="p-6 border-t border-gray-200 flex gap-3">
               <button
                 onClick={() => setIsAddingSlot(false)}
@@ -243,7 +243,7 @@ export const TimeSlotSettings: React.FC = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Max Bookings</label>
                 <input
@@ -255,7 +255,7 @@ export const TimeSlotSettings: React.FC = () => {
                   className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
               </div>
-              
+
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -269,7 +269,7 @@ export const TimeSlotSettings: React.FC = () => {
                 </label>
               </div>
             </div>
-            
+
             <div className="p-6 border-t border-gray-200 flex gap-3">
               <button
                 onClick={() => setEditingSlot(null)}
@@ -323,26 +323,25 @@ export const TimeSlotSettings: React.FC = () => {
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => handleToggleActive(slot)}
-                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                      slot.isActive
+                    className={`px-3 py-1 text-xs font-medium rounded transition-colors ${slot.isActive
                         ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200'
                         : 'bg-green-100 text-green-700 hover:bg-green-200'
-                    }`}
+                      }`}
                   >
                     {slot.isActive ? 'Deactivate' : 'Activate'}
                   </button>
-                  
+
                   <button
                     onClick={() => handleEditSlot(slot)}
                     className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded hover:bg-blue-200 transition-colors"
                   >
                     Edit
                   </button>
-                  
+
                   <button
                     onClick={() => handleDeleteSlot(slot.id)}
                     className="px-3 py-1 bg-red-100 text-red-700 text-xs font-medium rounded hover:bg-red-200 transition-colors"

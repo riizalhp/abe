@@ -12,8 +12,6 @@ const Staff: React.FC<StaffProps> = ({ users, onAddUser, onDeleteUser }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newUser, setNewUser] = useState({
         name: '',
-        username: '',
-        password: '',
         role: Role.MEKANIK,
         specialization: ''
     });
@@ -24,7 +22,7 @@ const Staff: React.FC<StaffProps> = ({ users, onAddUser, onDeleteUser }) => {
             ...newUser,
             avatar: `https://picsum.photos/seed/${newUser.name}-${Date.now()}/200/200`
         });
-        setNewUser({ name: '', username: '', password: '', role: Role.MEKANIK, specialization: '' });
+        setNewUser({ name: '', role: Role.MEKANIK, specialization: '' });
         setIsModalOpen(false);
     };
 
@@ -49,7 +47,7 @@ const Staff: React.FC<StaffProps> = ({ users, onAddUser, onDeleteUser }) => {
                     onClick={() => setIsModalOpen(true)}
                     className="bg-slate-900 text-white px-5 py-2.5 rounded-xl hover:bg-slate-800 shadow-lg shadow-slate-900/20 flex items-center transition-all font-bold text-sm"
                 >
-                    <UserPlus className="w-4 h-4 mr-2" /> Add Staff
+                    <UserPlus className="w-4 h-4 mr-2" /> Tambah Mekanik
                 </button>
             </div>
 
@@ -105,7 +103,7 @@ const Staff: React.FC<StaffProps> = ({ users, onAddUser, onDeleteUser }) => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 animate-in slide-in-from-bottom-8 duration-300">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <h3 className="font-bold text-lg text-slate-900">Add New Staff</h3>
+                            <h3 className="font-bold text-lg text-slate-900">Tambah Mekanik Baru</h3>
                             <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-900">
                                 <X className="w-5 h-5" />
                             </button>
@@ -113,19 +111,20 @@ const Staff: React.FC<StaffProps> = ({ users, onAddUser, onDeleteUser }) => {
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
                             {/* Form Fields kept minimal for brevity, same as original */}
                             <div className="space-y-1">
-                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Full Name</label>
-                                <input type="text" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} />
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Nama Lengkap Mekanik</label>
+                                <input type="text" required placeholder="Masukkan nama mekanik" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg" value={newUser.name} onChange={e => setNewUser({ ...newUser, name: e.target.value })} />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <input type="text" placeholder="Username" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg" value={newUser.username} onChange={e => setNewUser({ ...newUser, username: e.target.value })} />
-                                <input type="password" placeholder="Password" required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg" value={newUser.password} onChange={e => setNewUser({ ...newUser, password: e.target.value })} />
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Spesialisasi (Opsional)</label>
+                                <input type="text" placeholder="Contoh: Mesin, Kelistrikan, AC" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg" value={newUser.specialization} onChange={e => setNewUser({ ...newUser, specialization: e.target.value })} />
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                {Object.values(Role).filter(r => r !== Role.OWNER).map(r => (
-                                    <button key={r} type="button" onClick={() => setNewUser({ ...newUser, role: r })} className={`p-2 rounded border text-xs font-bold uppercase ${newUser.role === r ? 'bg-slate-900 text-white' : 'bg-white'}`}>{r}</button>
-                                ))}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                <p className="text-xs text-blue-700 flex items-center gap-2">
+                                    <Wrench className="w-4 h-4" />
+                                    Staff akan ditambahkan sebagai <strong>Mekanik</strong>
+                                </p>
                             </div>
-                            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Create Account</button>
+                            <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-bold">Tambah Mekanik</button>
                         </form>
                     </div>
                 </div>

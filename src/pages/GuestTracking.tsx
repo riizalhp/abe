@@ -10,13 +10,14 @@ interface GuestTrackingProps {
 }
 
 const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initialCode }) => {
-    const { workshopSlug } = useParams<{ workshopSlug: string }>();
+    const { workshopSlug, branchCode } = useParams<{ workshopSlug: string; branchCode?: string }>();
     const [searchCode, setSearchCode] = useState(initialCode || '');
     const [foundBooking, setFoundBooking] = useState<BookingRecord | null>(null);
     const [searched, setSearched] = useState(false);
     const [showSuccess, setShowSuccess] = useState(!!initialCode);
     const [workshopBookings, setWorkshopBookings] = useState<BookingRecord[]>([]);
     const [workshop, setWorkshop] = useState<{ name: string; slug: string } | null>(null);
+    const [branchName, setBranchName] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     // Fetch workshop-specific bookings
@@ -47,8 +48,27 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                 if (workshopData) {
                     setWorkshop({ name: workshopData.name, slug: workshopData.slug });
 
-                    // Get bookings for this workshop
-                    const { data: bookingsData, error: bookingsError } = await supabase
+                    // If branchCode is provided, find the branch
+                    let branchId: string | null = null;
+                    if (branchCode) {
+                        const { data: branchData, error: branchError } = await supabase
+                            .from('branches')
+                            .select('id, name')
+                            .eq('workshop_id', workshopData.id)
+                            .eq('code', branchCode)
+                            .eq('is_active', true)
+                            .single();
+
+                        if (branchError || !branchData) {
+                            console.error('Branch not found:', branchError);
+                        } else {
+                            branchId = branchData.id;
+                            setBranchName(branchData.name);
+                        }
+                    }
+
+                    // Get bookings for this workshop (and branch if specified)
+                    let bookingsQuery = supabase
                         .from('bookings')
                         .select(`
                             id,
@@ -65,6 +85,12 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                         `)
                         .eq('workshop_id', workshopData.id)
                         .order('created_at', { ascending: false });
+                    
+                    if (branchId) {
+                        bookingsQuery = bookingsQuery.eq('branch_id', branchId);
+                    }
+
+                    const { data: bookingsData, error: bookingsError } = await bookingsQuery;
 
                     if (bookingsError) {
                         console.error('Error fetching bookings:', bookingsError);
@@ -95,7 +121,7 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
         };
 
         fetchWorkshopData();
-    }, [workshopSlug]);
+    }, [workshopSlug, branchCode]);
 
     useEffect(() => {
         if (initialCode && workshopBookings.length > 0) {
@@ -154,7 +180,14 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                             </div>
                             <div>
                                 <h1 className="text-xl font-bold text-gray-900">{workshop.name}</h1>
-                                <p className="text-xs text-gray-500">Order Tracking</p>
+                                {branchName ? (
+                                    <p className="text-xs text-primary flex items-center gap-1">
+                                        <span className="material-symbols-outlined" style={{ fontSize: '12px' }}>location_on</span>
+                                        Cabang: {branchName}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-gray-500">Order Tracking</p>
+                                )}
                             </div>
                         </div>
                         <button onClick={onBack} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary/90">

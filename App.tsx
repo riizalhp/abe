@@ -307,7 +307,7 @@ function AppContent() {
           path="/register"
           element={!isAuthenticated ? <RegisterPage /> : <Navigate to="/dashboard" />}
         />
-        {/* Guest Booking Routes - supports both default and per-workshop */}
+        {/* Guest Booking Routes - supports both default and per-workshop/branch */}
         <Route
           path="/booking/new"
           element={<GuestBookingWrapper onSubmit={handleGuestBookingSubmit} />}
@@ -317,7 +317,15 @@ function AppContent() {
           element={<GuestBookingWrapper onSubmit={handleGuestBookingSubmit} />}
         />
         <Route
+          path="/booking/:workshopSlug/:branchCode"
+          element={<GuestBookingWrapper onSubmit={handleGuestBookingSubmit} />}
+        />
+        <Route
           path="/tracking/:workshopSlug"
+          element={<GuestTrackingWrapper bookings={bookings} initialCode={activeTrackingCode} setCode={setActiveTrackingCode} />}
+        />
+        <Route
+          path="/tracking/:workshopSlug/:branchCode"
           element={<GuestTrackingWrapper bookings={bookings} initialCode={activeTrackingCode} setCode={setActiveTrackingCode} />}
         />
         {/* Join Workshop via Invitation */}

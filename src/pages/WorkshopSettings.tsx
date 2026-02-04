@@ -15,7 +15,7 @@ interface WorkshopSettingsProps {
 }
 
 const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
-  const { currentBranch } = useBranch();
+  const { activeBranch } = useBranch();
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const [staff, setStaff] = useState<User[]>([]);
   const [invitations, setInvitations] = useState<any[]>([]);
@@ -191,15 +191,15 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
       <div className="mb-8">
         <div className="flex items-center gap-3 mb-2">
           <h1 className="text-3xl font-bold text-gray-900">Pengaturan Workshop</h1>
-          {currentBranch && (
+          {activeBranch && (
             <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded-full">
-              {currentBranch.name}
+              {activeBranch.name}
             </span>
           )}
         </div>
         <p className="text-gray-600">
           Kelola informasi dan staff workshop Anda
-          {currentBranch && <span className="text-blue-600"> (Cabang: {currentBranch.name})</span>}
+          {activeBranch && <span className="text-blue-600"> (Cabang: {activeBranch.name})</span>}
         </p>
       </div>
 
@@ -217,15 +217,21 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
 
       {/* Booking Link Card */}
       <div className="bg-gradient-to-r from-primary to-primary/80 rounded-xl p-6 text-white mb-8">
-        <h3 className="text-lg font-semibold mb-2">Link Booking Pelanggan</h3>
-        <p className="text-white/80 text-sm mb-4">Bagikan link ini kepada pelanggan untuk booking online</p>
+        <h3 className="text-lg font-semibold mb-2">Link Booking Pelanggan {activeBranch && `- ${activeBranch.name}`}</h3>
+        <p className="text-white/80 text-sm mb-4">Bagikan link ini kepada pelanggan untuk booking online di cabang ini</p>
         <div className="flex items-center gap-3">
-          <div className="flex-1 bg-white/20 rounded-lg px-4 py-3 font-mono text-sm">
-            {window.location.origin}/booking/{workshop.slug}
+          <div className="flex-1 bg-white/20 rounded-lg px-4 py-3 font-mono text-sm overflow-x-auto">
+            {activeBranch 
+              ? `${window.location.origin}/booking/${workshop.slug}/${activeBranch.code}`
+              : `${window.location.origin}/booking/${workshop.slug}`
+            }
           </div>
           <button
             onClick={() => {
-              navigator.clipboard.writeText(`${window.location.origin}/booking/${workshop.slug}`);
+              const url = activeBranch 
+                ? `${window.location.origin}/booking/${workshop.slug}/${activeBranch.code}`
+                : `${window.location.origin}/booking/${workshop.slug}`;
+              navigator.clipboard.writeText(url);
               setMessage({ type: 'success', text: 'Link disalin!' });
             }}
             className="px-4 py-3 bg-white text-primary rounded-lg font-semibold hover:bg-white/90 transition-colors"

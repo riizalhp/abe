@@ -469,19 +469,59 @@ export async function getPublicWorkshopInfo(slug: string): Promise<PublicWorksho
 // Moota Settings per Workshop
 // ============================================
 
-export async function getWorkshopMootaSettings(workshopId: string) {
-  const { data, error } = await supabase
+export async function getWorkshopMootaSettings(workshopId: string, branchId?: string) {
+  let query = supabase
     .from('moota_settings')
     .select('*')
     .eq('workshop_id', workshopId)
-    .eq('is_active', true)
-    .single();
+    .eq('is_active', true);
+
+  if (branchId) {
+    query = query.eq('branch_id', branchId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error || !data) {
     return null;
   }
 
   return data;
+}
+
+// ============================================
+// Branch lookup by code
+// ============================================
+
+export interface BranchInfo {
+  id: string;
+  name: string;
+  code: string;
+  address?: string;
+  phone?: string;
+}
+
+export async function getBranchByCode(workshopId: string, code: string): Promise<BranchInfo | null> {
+  const { data, error } = await supabase
+    .from('branches')
+    .select('*')
+    .eq('workshop_id', workshopId)
+    .eq('code', code)
+    .eq('is_active', true)
+    .single();
+
+  if (error || !data) {
+    console.error('Error fetching branch by code:', error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    code: data.code,
+    address: data.address,
+    phone: data.phone,
+  };
 }
 
 // ============================================
@@ -498,12 +538,18 @@ export interface WorkshopTimeSlot {
   isActive: boolean;
 }
 
-export async function getWorkshopTimeSlots(workshopId: string): Promise<WorkshopTimeSlot[]> {
-  const { data, error } = await supabase
+export async function getWorkshopTimeSlots(workshopId: string, branchId?: string): Promise<WorkshopTimeSlot[]> {
+  let query = supabase
     .from('time_slots')
     .select('*')
     .eq('workshop_id', workshopId)
-    .eq('is_active', true)
+    .eq('is_active', true);
+
+  if (branchId) {
+    query = query.eq('branch_id', branchId);
+  }
+
+  const { data, error } = await query
     .order('day_of_week')
     .order('start_time');
 
@@ -574,6 +620,9 @@ const workshopService = {
 
   // Public
   getPublicWorkshopInfo,
+
+  // Branch
+  getBranchByCode,
 
   // Moota
   getWorkshopMootaSettings,
