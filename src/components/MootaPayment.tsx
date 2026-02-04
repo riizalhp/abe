@@ -197,7 +197,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
     return (
       <div className="flex flex-col items-center justify-center p-8 bg-white rounded-lg shadow-md">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-        <p className="text-gray-600">Preparing payment...</p>
+        <p className="text-gray-600">Menyiapkan pembayaran...</p>
       </div>
     );
   }
@@ -209,21 +209,21 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
           <svg className="w-16 h-16 text-red-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Payment Error</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Gagal Memproses Pembayaran</h3>
           <p className="text-gray-600 mb-4">{error}</p>
           <div className="flex justify-center gap-3">
             <button
               onClick={initializePayment}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
-              Try Again
+              Coba Lagi
             </button>
             {onCancel && (
               <button
                 onClick={onCancel}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
-                Cancel
+                Batal
               </button>
             )}
           </div>
@@ -241,12 +241,12 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h3 className="text-xl font-bold text-green-600 mb-2">Payment Confirmed!</h3>
+          <h3 className="text-xl font-bold text-green-600 mb-2">Pembayaran Berhasil!</h3>
           <p className="text-gray-600 mb-4">
-            Thank you! Your payment of {formatCurrency(paymentOrder?.totalAmount || 0)} has been received.
+            Terima kasih! Pembayaran sebesar {formatCurrency(paymentOrder?.totalAmount || 0)} telah diterima.
           </p>
           <div className="text-sm text-gray-500">
-            Order ID: {paymentOrder?.orderId}
+            ID Order: {paymentOrder?.orderId}
           </div>
         </div>
       </div>
@@ -258,7 +258,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Bank Transfer Payment</h3>
+          <h3 className="text-lg font-semibold">Pembayaran Transfer Bank</h3>
           {onCancel && (
             <button onClick={onCancel} className="text-white/80 hover:text-white">
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -270,11 +270,11 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
         
         {/* Timer */}
         <div className="flex items-center justify-between bg-white/10 rounded-lg p-3">
-          <span className="text-sm">Time remaining:</span>
+          <span className="text-sm">Sisa waktu:</span>
           <span className={`font-mono font-bold text-lg ${
             timeRemaining === 'Expired' ? 'text-red-300' : ''
           }`}>
-            {timeRemaining}
+            {timeRemaining === 'Expired' ? 'Kadaluarsa' : timeRemaining}
           </span>
         </div>
       </div>
@@ -284,7 +284,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
         {/* Bank Info */}
         {settings && (
           <div className="bg-gray-50 rounded-lg p-4">
-            <div className="text-sm text-gray-500 mb-1">Transfer to</div>
+            <div className="text-sm text-gray-500 mb-1">Transfer ke</div>
             <div className="flex items-center justify-between">
               <div>
                 <div className="font-semibold text-gray-900">
@@ -305,14 +305,14 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
-                      Copied!
+                      Tersalin!
                     </>
                   ) : (
                     <>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                       </svg>
-                      Copy
+                      Salin
                     </>
                   )}
                 </button>
@@ -323,10 +323,32 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
 
         {/* Amount */}
         <div className="border-2 border-blue-500 rounded-lg p-4 bg-blue-50">
-          <div className="text-sm text-blue-600 mb-1 font-medium">Transfer Amount (EXACT)</div>
+          <div className="text-sm text-blue-600 mb-1 font-medium">Jumlah Transfer (WAJIB SESUAI)</div>
           <div className="flex items-center justify-between">
-            <div className="text-3xl font-bold text-blue-700">
-              {formatCurrency(paymentOrder?.totalAmount || 0)}
+            <div className="text-3xl font-bold">
+              {/* Highlight last 3 digits (unique code) in red */}
+              {(() => {
+                const totalStr = (paymentOrder?.totalAmount || 0).toLocaleString('id-ID');
+                const baseStr = 'Rp ';
+                // Find where the unique code digits are (last 3 digits before any separator)
+                const numericPart = (paymentOrder?.totalAmount || 0).toString();
+                const uniqueCodeDigits = paymentOrder?.uniqueCode?.toString().padStart(3, '0') || '000';
+                
+                // Split the formatted number to highlight last 3 digit positions
+                if (numericPart.length > 3) {
+                  const mainPart = numericPart.slice(0, -3);
+                  const highlightPart = numericPart.slice(-3);
+                  const formattedMain = parseInt(mainPart).toLocaleString('id-ID');
+                  return (
+                    <>
+                      <span className="text-blue-700">{baseStr}{formattedMain}.</span>
+                      <span className="text-red-600 bg-red-50 px-1 rounded">{highlightPart}</span>
+                    </>
+                  );
+                } else {
+                  return <span className="text-blue-700">{baseStr}{totalStr}</span>;
+                }
+              })()}
             </div>
             <button
               onClick={() => copyToClipboard((paymentOrder?.totalAmount || 0).toString(), 'amount')}
@@ -337,28 +359,38 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Copied!
+                  Tersalin!
                 </>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                   </svg>
-                  Copy
+                  Salin
                 </>
               )}
             </button>
           </div>
           
-          {/* Amount breakdown */}
+          {/* Amount breakdown with highlighted unique code */}
           <div className="mt-3 pt-3 border-t border-blue-200 text-sm">
             <div className="flex justify-between text-gray-600">
-              <span>Base amount:</span>
+              <span>Nominal asli:</span>
               <span>{formatCurrency(paymentOrder?.amount || 0)}</span>
             </div>
-            <div className="flex justify-between text-blue-600">
-              <span>Unique code:</span>
-              <span>+{paymentOrder?.uniqueCode}</span>
+            <div className="flex justify-between items-center">
+              <span className="text-blue-600">Kode unik:</span>
+              <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded">+{paymentOrder?.uniqueCode}</span>
+            </div>
+          </div>
+          
+          {/* Visual explanation */}
+          <div className="mt-3 pt-3 border-t border-blue-200">
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <span>3 digit terakhir berwarna <span className="text-red-600 font-bold">merah</span> adalah kode unik</span>
             </div>
           </div>
         </div>
@@ -370,10 +402,10 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
               <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
             </svg>
             <div>
-              <p className="text-sm text-yellow-700 font-medium">Important!</p>
+              <p className="text-sm text-yellow-700 font-medium">Penting!</p>
               <p className="text-sm text-yellow-600 mt-1">
-                Please transfer the <strong>EXACT</strong> amount shown above. 
-                Different amounts cannot be automatically verified.
+                Transfer dengan nominal <strong>PERSIS</strong> seperti di atas. 
+                Nominal berbeda tidak dapat diverifikasi otomatis.
               </p>
             </div>
           </div>
@@ -391,14 +423,14 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              Checking Payment...
+              Memeriksa Pembayaran...
             </>
           ) : (
             <>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              I've Completed the Transfer
+              Saya Sudah Transfer
             </>
           )}
         </button>
@@ -406,14 +438,14 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
         {/* Auto-check indicator */}
         {autoCheck && (
           <p className="text-center text-sm text-gray-500">
-            Payment status is checked automatically every {checkInterval} seconds
+            Status pembayaran diperiksa otomatis setiap {checkInterval} detik
           </p>
         )}
 
         {/* Order Info */}
         <div className="text-center text-sm text-gray-500 pt-2 border-t">
-          <div>Order ID: <span className="font-mono">{paymentOrder?.orderId}</span></div>
-          <div>Customer: {paymentOrder?.customerName}</div>
+          <div>ID Order: <span className="font-mono">{paymentOrder?.orderId}</span></div>
+          <div>Pelanggan: {paymentOrder?.customerName}</div>
         </div>
       </div>
     </div>
