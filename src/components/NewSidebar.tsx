@@ -64,9 +64,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
       roleRequired: [Role.ADMIN, Role.OWNER]
     },
     { 
-      path: '/qris-settings', 
-      label: 'QRIS Settings', 
-      icon: 'qr_code',
+      path: '/payment-settings', 
+      label: 'Payment Settings', 
+      icon: 'payments',
       category: 'Administration',
       roleRequired: [Role.ADMIN, Role.OWNER]
     },
@@ -74,13 +74,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
       path: '/time-slot-settings', 
       label: 'Time Slots', 
       icon: 'schedule',
-      category: 'Administration',
-      roleRequired: [Role.ADMIN, Role.OWNER]
-    },
-    { 
-      path: '/moota-settings', 
-      label: 'Moota Payment', 
-      icon: 'account_balance',
       category: 'Administration',
       roleRequired: [Role.ADMIN, Role.OWNER]
     },

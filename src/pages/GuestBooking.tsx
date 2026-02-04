@@ -45,6 +45,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const [bookingOrderId, setBookingOrderId] = useState<string>('');
     const [isPaid, setIsPaid] = useState(false);
     const [mootaConfigured, setMootaConfigured] = useState(false);
+    const [qrisConfigured, setQrisConfigured] = useState(false);
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'qris' | 'moota' | null>(null);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -87,6 +89,10 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                             // Check Moota config for this branch
                             const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id, branch.id);
                             setMootaConfigured(!!mootaSettings);
+                            
+                            // Check QRIS config
+                            const qrisData = await qrisService.getAllQRISData();
+                            setQrisConfigured(qrisData.length > 0);
                         } else {
                             setWorkshopError('Cabang tidak ditemukan');
                         }
@@ -111,6 +117,10 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                         // Check Moota config for this workshop
                         const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id);
                         setMootaConfigured(!!mootaSettings);
+                        
+                        // Check QRIS config
+                        const qrisData = await qrisService.getAllQRISData();
+                        setQrisConfigured(qrisData.length > 0);
                     }
                 } else {
                     setWorkshopError('Workshop tidak ditemukan');
@@ -121,6 +131,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 setTimeSlots(availableSlots);
                 const settings = await mootaService.getActiveSettings();
                 setMootaConfigured(!!settings);
+                const qrisData = await qrisService.getAllQRISData();
+                setQrisConfigured(qrisData.length > 0);
             }
             
             setWorkshopLoading(false);
@@ -521,19 +533,95 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                         </div>
                     )}
 
-{/* STEP 2: Dynamic Payment based on Workshop Settings */}
+{/* STEP 2: Payment - User Choice */}
                     {step === 2 && (
                         <div className="p-6">
                             <div className="text-center mb-6">
-                                <h3 className="text-2xl font-bold text-gray-900 mb-1">Payment</h3>
-                                <p className="text-gray-600">{formData.vehicleModel} - Booking Fee</p>
+                                <h3 className="text-2xl font-bold text-gray-900 mb-1">Pembayaran</h3>
+                                <p className="text-gray-600">{formData.vehicleModel} - Biaya Booking</p>
                                 <p className="text-lg font-bold text-primary mt-2">Rp {paymentAmount.toLocaleString('id-ID')}</p>
                             </div>
 
-                            {/* Dynamic Payment Method */}
-                            {workshop?.payment_method === PaymentMethod.MOOTA && mootaConfigured ? (
+                            {/* Payment Method Selection */}
+                            {!selectedPaymentMethod && (mootaConfigured || qrisConfigured) && (
+                                <div className="space-y-4">
+                                    <p className="text-center text-gray-600 mb-4">Pilih metode pembayaran:</p>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {/* Moota Transfer Option */}
+                                        {mootaConfigured && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPaymentMethod('moota')}
+                                                className="p-6 border-2 border-gray-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-left group"
+                                            >
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
+                                                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <h4 className="font-semibold text-gray-900 mb-1">Transfer Bank</h4>
+                                                        <p className="text-sm text-gray-600">Transfer ke rekening bank dengan kode unik</p>
+                                                        <div className="mt-2 flex items-center gap-2">
+                                                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                                                                ✓ Verifikasi Otomatis
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        )}
+                                        
+                                        {/* QRIS Option */}
+                                        {qrisConfigured && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedPaymentMethod('qris')}
+                                                className="p-6 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
+                                            >
+                                                <div className="flex items-start gap-4">
+                                                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
+                                                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <h4 className="font-semibold text-gray-900 mb-1">QRIS</h4>
+                                                        <p className="text-sm text-gray-600">Scan QR code dan upload bukti transfer</p>
+                                                        <div className="mt-2 flex items-center gap-2">
+                                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                                                                Upload Bukti
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex justify-start pt-4">
+                                        <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
+                                            ← Kembali
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Moota Transfer Payment */}
+                            {selectedPaymentMethod === 'moota' && mootaConfigured && (
                                 <>
-                                    {/* Moota Payment Component */}
+                                    <div className="mb-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPaymentMethod(null)}
+                                            className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
+                                        >
+                                            ← Ganti metode pembayaran
+                                        </button>
+                                    </div>
+                                    
                                     <MootaPayment
                                         amount={paymentAmount}
                                         orderId={bookingOrderId}
@@ -542,64 +630,43 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                         description={`Booking Fee - ${formData.vehicleModel} - ${formData.licensePlate}`}
                                         onPaymentComplete={handlePaymentComplete}
                                         onPaymentExpired={() => {
-                                            alert('Payment expired. Please try again.');
+                                            alert('Waktu pembayaran habis. Silakan coba lagi.');
                                             setStep(1);
+                                            setSelectedPaymentMethod(null);
                                         }}
-                                        onCancel={() => setStep(1)}
+                                        onCancel={() => {
+                                            setStep(1);
+                                            setSelectedPaymentMethod(null);
+                                        }}
                                         autoCheck={true}
                                         checkInterval={30}
                                     />
                                     
                                     <div className="text-center space-y-2 mt-6">
-                                        <p className="text-sm text-gray-600">Booking fee akan dipotong dari total servis.</p>
-                                        <p className="text-xs text-gray-500">Refundable up to 24 hours before appointment.</p>
+                                        <p className="text-sm text-gray-600">Biaya booking akan dipotong dari total servis.</p>
                                     </div>
                                 </>
-                            ) : workshop?.payment_method === PaymentMethod.QRIS_DYNAMIC ? (
+                            )}
+
+                            {/* QRIS Payment with Proof Upload */}
+                            {selectedPaymentMethod === 'qris' && qrisConfigured && (
                                 <>
-                                    {/* QRIS Dynamic Payment */}
-                                    <QRISPayment
-                                        amount={paymentAmount}
-                                        orderId={bookingOrderId}
-                                        description={`Booking Fee - ${formData.vehicleModel}`}
-                                        onPaymentSuccess={handlePaymentComplete}
-                                        onCancel={() => setStep(1)}
-                                    />
+                                    <div className="mb-4">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSelectedPaymentMethod(null)}
+                                            className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
+                                        >
+                                            ← Ganti metode pembayaran
+                                        </button>
+                                    </div>
                                     
-                                    <div className="text-center space-y-2 mt-6">
-                                        <p className="text-sm text-gray-600">Scan QRIS code dengan aplikasi mobile banking Anda.</p>
-                                        <p className="text-xs text-gray-500">Booking fee akan dipotong dari total servis.</p>
-                                    </div>
-                                </>
-                            ) : workshop?.payment_method === PaymentMethod.QRIS_STATIC ? (
-                                <>
-                                    {/* QRIS Static Payment */}
-                                    <QRISUploader
-                                        onQrDecode={(data, error) => {
-                                            if (error) {
-                                                alert(`QRIS Error: ${error}`);
-                                                return;
-                                            }
-                                            // Handle static QRIS payment
-                                            handlePaymentSuccess();
-                                        }}
-                                        maxFileSize={5}
-                                    />
-                                    
-                                    <div className="text-center space-y-2 mt-6">
-                                        <p className="text-sm text-gray-600">Scan QRIS code yang tersedia di bengkel atau upload foto QRIS.</p>
-                                        <p className="text-xs text-gray-500">Pastikan transfer sesuai nominal yang tertera.</p>
-                                    </div>
-                                </>
-                            ) : (
-                                /* Manual Payment */
-                                <>
                                     <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                                         <div className="flex items-start space-x-3">
                                             <span className="material-symbols-outlined text-blue-600 mt-0.5">info</span>
                                             <div className="text-sm text-blue-800">
-                                                <p className="font-semibold mb-1">Manual Payment</p>
-                                                <p>Silakan lakukan pembayaran sesuai instruksi bengkel dan upload bukti pembayaran.</p>
+                                                <p className="font-semibold mb-1">Pembayaran QRIS</p>
+                                                <p>Scan QRIS di bawah menggunakan mobile banking Anda, lalu upload bukti pembayaran.</p>
                                                 <p className="mt-2 font-bold text-lg">Total: Rp {paymentAmount.toLocaleString('id-ID')}</p>
                                             </div>
                                         </div>
@@ -632,16 +699,16 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                                                 className="max-w-full max-h-48 mx-auto rounded-lg shadow-md"
                                                             />
                                                             <p className="text-sm text-gray-600">
-                                                                {paymentProof?.name} (Converted to WebP)
+                                                                {paymentProof?.name}
                                                             </p>
-                                                            <p className="text-xs text-primary">Click to change image</p>
+                                                            <p className="text-xs text-primary">Klik untuk ganti gambar</p>
                                                         </div>
                                                     ) : (
                                                         <div className="space-y-3">
                                                             <span className="material-symbols-outlined text-4xl text-gray-400">cloud_upload</span>
                                                             <div>
                                                                 <p className="text-lg font-medium text-gray-700">Upload Bukti Pembayaran</p>
-                                                                <p className="text-sm text-gray-500">JPG, PNG, GIF up to 5MB</p>
+                                                                <p className="text-sm text-gray-500">JPG, PNG, GIF maksimal 5MB</p>
                                                             </div>
                                                         </div>
                                                     )}
@@ -652,7 +719,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                                 <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                                                     <div className="flex items-center space-x-3">
                                                         <span className="material-symbols-outlined text-green-600">check_circle</span>
-                                                        <span className="text-sm font-medium text-green-800">Payment proof uploaded</span>
+                                                        <span className="text-sm font-medium text-green-800">Bukti pembayaran berhasil diupload</span>
                                                     </div>
                                                     <button
                                                         type="button"
@@ -681,13 +748,107 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                             }`}
                                         >
                                             <span className="material-symbols-outlined">verified</span>
-                                            {paymentProof ? 'Continue to Next Step' : 'Upload Payment Proof to Continue'}
+                                            {paymentProof ? 'Lanjutkan' : 'Upload Bukti untuk Melanjutkan'}
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Fallback: No payment method configured */}
+                            {!mootaConfigured && !qrisConfigured && (
+                                <>
+                                    <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                        <div className="flex items-start space-x-3">
+                                            <span className="material-symbols-outlined text-yellow-600 mt-0.5">warning</span>
+                                            <div className="text-sm text-yellow-800">
+                                                <p className="font-semibold mb-1">Metode Pembayaran Belum Dikonfigurasi</p>
+                                                <p>Silakan hubungi bengkel untuk informasi pembayaran atau upload bukti pembayaran manual.</p>
+                                                <p className="mt-2 font-bold text-lg">Total: Rp {paymentAmount.toLocaleString('id-ID')}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Upload Payment Proof Section */}
+                                    <div className="border-t border-gray-200 pt-6">
+                                        <div className="mb-4">
+                                            <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Bukti Pembayaran</h4>
+                                            <p className="text-sm text-gray-600">
+                                                Setelah melakukan pembayaran, silakan upload screenshot/foto bukti pembayaran
+                                            </p>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    onChange={handlePaymentProofUpload}
+                                                    className="hidden"
+                                                    id="payment-proof-upload-fallback"
+                                                />
+                                                <label htmlFor="payment-proof-upload-fallback" className="cursor-pointer">
+                                                    {paymentProofPreview ? (
+                                                        <div className="space-y-3">
+                                                            <img
+                                                                src={paymentProofPreview}
+                                                                alt="Payment proof preview"
+                                                                className="max-w-full max-h-48 mx-auto rounded-lg shadow-md"
+                                                            />
+                                                            <p className="text-sm text-gray-600">{paymentProof?.name}</p>
+                                                            <p className="text-xs text-primary">Klik untuk ganti gambar</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-3">
+                                                            <span className="material-symbols-outlined text-4xl text-gray-400">cloud_upload</span>
+                                                            <div>
+                                                                <p className="text-lg font-medium text-gray-700">Upload Bukti Pembayaran</p>
+                                                                <p className="text-sm text-gray-500">JPG, PNG, GIF maksimal 5MB</p>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </label>
+                                            </div>
+                                            
+                                            {paymentProof && (
+                                                <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                                                    <div className="flex items-center space-x-3">
+                                                        <span className="material-symbols-outlined text-green-600">check_circle</span>
+                                                        <span className="text-sm font-medium text-green-800">Bukti pembayaran berhasil diupload</span>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setPaymentProof(null);
+                                                            setPaymentProofPreview('');
+                                                            setPaymentProofWebP('');
+                                                        }}
+                                                        className="text-green-600 hover:text-green-800"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">close</span>
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Continue Button */}
+                                        <button
+                                            type="button"
+                                            onClick={handlePaymentSuccess}
+                                            disabled={!paymentProof}
+                                            className={`w-full mt-6 py-4 rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2 ${
+                                                paymentProof
+                                                    ? 'bg-primary text-white hover:bg-primary/90'
+                                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                            }`}
+                                        >
+                                            <span className="material-symbols-outlined">verified</span>
+                                            {paymentProof ? 'Lanjutkan' : 'Upload Bukti untuk Melanjutkan'}
                                         </button>
                                     </div>
 
                                     <div className="flex justify-start mt-4">
                                         <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
-                                            ← Back
+                                            ← Kembali
                                         </button>
                                     </div>
                                 </>
@@ -701,7 +862,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                             <form onSubmit={handleFinalSubmit} className="space-y-6">
                                 <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg flex items-center text-sm">
                                     <span className="material-symbols-outlined text-green-600 mr-3">check_circle</span>
-                                    Payment Successful. Please provide vehicle details.
+                                    Pembayaran berhasil. Silakan lengkapi detail kendaraan.
                                 </div>
 
                                 <div className="space-y-3">

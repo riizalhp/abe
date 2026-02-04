@@ -26,10 +26,9 @@ import CRM from './src/pages/CRM';
 import Bookings from './src/pages/Bookings';
 import Staff from './src/pages/Staff';
 import Queue from './src/pages/Queue';
-import { QRISSettings } from './src/pages/QRISSettings';
 import { TimeSlotSettings } from './src/pages/TimeSlotSettings';
 import URLSettings from './src/pages/URLSettings';
-import MootaSettingsPage from './src/pages/MootaSettings';
+import PaymentSettings from './src/pages/PaymentSettings';
 import WorkshopSettings from './src/pages/WorkshopSettings';
 import JoinWorkshop from './src/pages/JoinWorkshop';
 import AddBranchPage from './src/pages/AddBranch';
@@ -379,9 +378,9 @@ function AppContent() {
               <Staff users={users} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} />
             </ProtectedRoute>
           } />
-          <Route path="/qris-settings" element={
+          <Route path="/payment-settings" element={
             <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
-              <QRISSettings />
+              <PaymentSettings />
             </ProtectedRoute>
           } />
           <Route path="/time-slot-settings" element={
@@ -392,11 +391,6 @@ function AppContent() {
           <Route path="/url-settings" element={
             <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
               <URLSettings />
-            </ProtectedRoute>
-          } />
-          <Route path="/moota-settings" element={
-            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
-              <MootaSettingsPage />
             </ProtectedRoute>
           } />
           <Route path="/workshop-settings" element={
