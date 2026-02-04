@@ -46,11 +46,28 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const [isPaid, setIsPaid] = useState(false);
     const [mootaConfigured, setMootaConfigured] = useState(false);
     const [qrisConfigured, setQrisConfigured] = useState(false);
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'qris' | 'moota' | null>(null);
+    const [activePaymentMethod, setActivePaymentMethod] = useState<'qris' | 'moota'>('qris');
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Load active payment method and booking fee from localStorage
+    useEffect(() => {
+        const savedMethod = localStorage.getItem('active_payment_method');
+        if (savedMethod === 'qris' || savedMethod === 'moota') {
+            setActivePaymentMethod(savedMethod);
+        }
+        
+        // Load booking fee from localStorage
+        const savedBookingFee = localStorage.getItem('qris_default_amount');
+        if (savedBookingFee) {
+            const fee = parseInt(savedBookingFee, 10);
+            if (!isNaN(fee) && fee > 0) {
+                setPaymentAmount(fee);
+            }
+        }
+    }, []);
 
     // Load workshop and branch info if slug is provided
     useEffect(() => {
@@ -255,7 +272,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
         // Generate unique order ID for this booking
         const orderId = `BK-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         setBookingOrderId(orderId);
-        setPaymentAmount(25000); // Booking fee
+        // Booking fee is already loaded from localStorage (qris_default_amount)
         setStep(2);
     };
 
@@ -533,7 +550,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                         </div>
                     )}
 
-{/* STEP 2: Payment - User Choice */}
+{/* STEP 2: Payment - Based on Active Payment Method Toggle */}
                     {step === 2 && (
                         <div className="p-6">
                             <div className="text-center mb-6">
@@ -542,84 +559,14 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                 <p className="text-lg font-bold text-primary mt-2">Rp {paymentAmount.toLocaleString('id-ID')}</p>
                             </div>
 
-                            {/* Payment Method Selection */}
-                            {!selectedPaymentMethod && (mootaConfigured || qrisConfigured) && (
-                                <div className="space-y-4">
-                                    <p className="text-center text-gray-600 mb-4">Pilih metode pembayaran:</p>
-                                    
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Moota Transfer Option */}
-                                        {mootaConfigured && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedPaymentMethod('moota')}
-                                                className="p-6 border-2 border-gray-200 rounded-xl hover:border-green-500 hover:bg-green-50 transition-all text-left group"
-                                            >
-                                                <div className="flex items-start gap-4">
-                                                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center group-hover:bg-green-200 transition-colors">
-                                                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <h4 className="font-semibold text-gray-900 mb-1">Transfer Bank</h4>
-                                                        <p className="text-sm text-gray-600">Transfer ke rekening bank dengan kode unik</p>
-                                                        <div className="mt-2 flex items-center gap-2">
-                                                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                                                                ✓ Verifikasi Otomatis
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        )}
-                                        
-                                        {/* QRIS Option */}
-                                        {qrisConfigured && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedPaymentMethod('qris')}
-                                                className="p-6 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left group"
-                                            >
-                                                <div className="flex items-start gap-4">
-                                                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
-                                                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                                        </svg>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <h4 className="font-semibold text-gray-900 mb-1">QRIS</h4>
-                                                        <p className="text-sm text-gray-600">Scan QR code dan upload bukti transfer</p>
-                                                        <div className="mt-2 flex items-center gap-2">
-                                                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-                                                                Upload Bukti
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        )}
-                                    </div>
-                                    
-                                    <div className="flex justify-start pt-4">
-                                        <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
-                                            ← Kembali
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Moota Transfer Payment */}
-                            {selectedPaymentMethod === 'moota' && mootaConfigured && (
+                            {/* Moota Transfer Payment - Active Method */}
+                            {activePaymentMethod === 'moota' && mootaConfigured && (
                                 <>
-                                    <div className="mb-4">
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedPaymentMethod(null)}
-                                            className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
-                                        >
-                                            ← Ganti metode pembayaran
-                                        </button>
+                                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                                        </svg>
+                                        <span className="text-sm font-medium text-green-800">Pembayaran via Transfer Bank (Moota)</span>
                                     </div>
                                     
                                     <MootaPayment
@@ -632,11 +579,9 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                         onPaymentExpired={() => {
                                             alert('Waktu pembayaran habis. Silakan coba lagi.');
                                             setStep(1);
-                                            setSelectedPaymentMethod(null);
                                         }}
                                         onCancel={() => {
                                             setStep(1);
-                                            setSelectedPaymentMethod(null);
                                         }}
                                         autoCheck={true}
                                         checkInterval={30}
@@ -645,20 +590,23 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                     <div className="text-center space-y-2 mt-6">
                                         <p className="text-sm text-gray-600">Biaya booking akan dipotong dari total servis.</p>
                                     </div>
+                                    
+                                    <div className="flex justify-start pt-4">
+                                        <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
+                                            ← Kembali
+                                        </button>
+                                    </div>
                                 </>
                             )}
 
-                            {/* QRIS Payment with Proof Upload */}
-                            {selectedPaymentMethod === 'qris' && qrisConfigured && (
+                            {/* QRIS Payment with Proof Upload - Active Method */}
+                            {activePaymentMethod === 'qris' && qrisConfigured && (
                                 <>
-                                    <div className="mb-4">
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedPaymentMethod(null)}
-                                            className="text-sm text-gray-600 hover:text-gray-800 flex items-center gap-1"
-                                        >
-                                            ← Ganti metode pembayaran
-                                        </button>
+                                    <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                        </svg>
+                                        <span className="text-sm font-medium text-blue-800">Pembayaran via QRIS</span>
                                     </div>
                                     
                                     <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -672,8 +620,15 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                         </div>
                                     </div>
 
+                                    {/* QRIS Code Display */}
+                                    <QRISPayment 
+                                        amount={paymentAmount}
+                                        orderId={bookingOrderId}
+                                        onPaymentComplete={handlePaymentComplete}
+                                    />
+
                                     {/* Upload Payment Proof Section */}
-                                    <div className="border-t border-gray-200 pt-6">
+                                    <div className="border-t border-gray-200 pt-6 mt-6">
                                         <div className="mb-4">
                                             <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Bukti Pembayaran</h4>
                                             <p className="text-sm text-gray-600">
@@ -751,18 +706,26 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                             {paymentProof ? 'Lanjutkan' : 'Upload Bukti untuk Melanjutkan'}
                                         </button>
                                     </div>
+                                    
+                                    <div className="flex justify-start pt-4">
+                                        <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
+                                            ← Kembali
+                                        </button>
+                                    </div>
                                 </>
                             )}
 
-                            {/* Fallback: No payment method configured */}
-                            {!mootaConfigured && !qrisConfigured && (
+                            {/* Fallback: Selected method not configured */}
+                            {((activePaymentMethod === 'moota' && !mootaConfigured) || 
+                              (activePaymentMethod === 'qris' && !qrisConfigured)) && (
                                 <>
                                     <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                                         <div className="flex items-start space-x-3">
                                             <span className="material-symbols-outlined text-yellow-600 mt-0.5">warning</span>
                                             <div className="text-sm text-yellow-800">
                                                 <p className="font-semibold mb-1">Metode Pembayaran Belum Dikonfigurasi</p>
-                                                <p>Silakan hubungi bengkel untuk informasi pembayaran atau upload bukti pembayaran manual.</p>
+                                                <p>Metode pembayaran {activePaymentMethod === 'moota' ? 'Moota Transfer' : 'QRIS'} belum dikonfigurasi oleh bengkel.</p>
+                                                <p className="mt-2">Silakan hubungi bengkel untuk informasi pembayaran atau upload bukti pembayaran manual.</p>
                                                 <p className="mt-2 font-bold text-lg">Total: Rp {paymentAmount.toLocaleString('id-ID')}</p>
                                             </div>
                                         </div>
@@ -794,7 +757,9 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                                                 alt="Payment proof preview"
                                                                 className="max-w-full max-h-48 mx-auto rounded-lg shadow-md"
                                                             />
-                                                            <p className="text-sm text-gray-600">{paymentProof?.name}</p>
+                                                            <p className="text-sm text-gray-600">
+                                                                {paymentProof?.name}
+                                                            </p>
                                                             <p className="text-xs text-primary">Klik untuk ganti gambar</p>
                                                         </div>
                                                     ) : (
@@ -845,8 +810,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                             {paymentProof ? 'Lanjutkan' : 'Upload Bukti untuk Melanjutkan'}
                                         </button>
                                     </div>
-
-                                    <div className="flex justify-start mt-4">
+                                    
+                                    <div className="flex justify-start pt-4">
                                         <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
                                             ← Kembali
                                         </button>

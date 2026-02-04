@@ -5,10 +5,19 @@ import mootaService, { MootaSettings as MootaSettingsData, MootaBankAccount } fr
 import { useBranch } from '../../lib/BranchContext';
 
 type PaymentTab = 'qris' | 'moota';
+type ActivePaymentMethod = 'qris' | 'moota';
+
+// Hardcoded Moota API Key (Sandbox)
+const MOOTA_API_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJucWllNHN3OGxsdyIsImp0aSI6ImNkN2QyOGFhOGYxNTVmZDg0YzA4MDA5ODUyNTQ1ZWM5YzgwNzYzYzFiOWQ2Mjc5NzRiOTMxYjhkYjlmNzczYWJiMTE5YmJjNzVlYTM4ZmRhIiwiaWF0IjoxNzcwMTk5NTMxLjAyOTk3MywibmJmIjoxNzcwMTk5NTMxLjAyOTk3NiwiZXhwIjoxODAxNzM1NTMxLjAyNzcyMywic3ViIjoiNDMyMDEiLCJzY29wZXMiOlsiYXBpIiwidXNlciIsInVzZXJfcmVhZCIsImJhbmsiLCJiYW5rX3JlYWQiLCJtdXRhdGlvbiIsIm11dGF0aW9uX3JlYWQiXX0.IjXjuP2QD5Vqc-VoVvFV2EWkA78cs0zmGa4c7MN1Eznu6D35_rym_r9rXSGyYqBjzC-XTLmWCh9ku_c1zBroRA6uKX6KbQFjzR1pc03xiSMUw2lhadhPQmCpxAsv5majC-5wqTus1ZXpEIsw6OGD93Dx5ZB3xee39RQ7rUXzbE3C2v7igAw1TEsiG-MtgV8aBHPkYLafWVptm1Ng8qog6SnJbYbs3lXjxV4K4mwAntnDgJtEFgr_yjgFs22hHf_aFe4_O0liXFCr_Zrk-NcUBKyQNQ_ess_gBPMkjfmbN7PjfoMlR4aynKD3GLvllkDDOD7vIAb3PuxqGUEWnLYQaSeTNCeHkS91XMtwon7Oc7gqLvs6Z5oVXne1D8RoQKaZHaG0Op8Dxge6KhuqJSmUfUTXdmQ7EDt7cBwx0LO5XYWcoDksxb0YuCFAJWgzO3wjR5D27S5hDQY5Jg1BPBjDlbEHQXDj-0vmJczBUr7g7iLjWViBx4X8fpRVb7gLrBRMVswIiTX5vf_uhtVXQIpSWLKjfo5rhBxPeJ8k_bYOYpREh_X51LQk58qr_MlTE3kpIHn6VIDQg-I1_7T2KF60IwRScjPFdQPqlwgIk74R3SVgvdT9Lif966oNkd1Y5bJylcvRAuBYiAPEBkZ8iAHf2xSKnqwGhcITI2Gcb7x-loE';
 
 export const PaymentSettings: React.FC = () => {
   const { activeBranch } = useBranch();
   const [activeTab, setActiveTab] = useState<PaymentTab>('qris');
+  
+  // Active Payment Method Toggle
+  const [activePaymentMethod, setActivePaymentMethod] = useState<ActivePaymentMethod>('qris');
+  const [showMethodChangeAlert, setShowMethodChangeAlert] = useState(false);
+  const [pendingMethod, setPendingMethod] = useState<ActivePaymentMethod | null>(null);
   
   // QRIS State
   const [qrisData, setQrisData] = useState<QRISData[]>([]);
@@ -27,7 +36,7 @@ export const PaymentSettings: React.FC = () => {
   
   // Moota Form
   const [mootaForm, setMootaForm] = useState({
-    accessToken: '',
+    accessToken: MOOTA_API_KEY,
     bankAccountId: '',
     bankAccountName: '',
     accountNumber: '',
@@ -38,6 +47,14 @@ export const PaymentSettings: React.FC = () => {
   });
   const [isEditingMoota, setIsEditingMoota] = useState(false);
   const [editingMootaId, setEditingMootaId] = useState<string | null>(null);
+
+  // Load Active Payment Method
+  const loadActivePaymentMethod = useCallback(() => {
+    const saved = localStorage.getItem('active_payment_method');
+    if (saved === 'qris' || saved === 'moota') {
+      setActivePaymentMethod(saved);
+    }
+  }, []);
 
   // Load QRIS Data
   const loadQRISData = useCallback(async () => {
@@ -75,12 +92,14 @@ export const PaymentSettings: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    loadActivePaymentMethod();
     loadQRISData();
     loadMootaSettings();
     loadDefaultAmount();
     
     // Listen for branch change
     const handleBranchChange = () => {
+      loadActivePaymentMethod();
       loadQRISData();
       loadMootaSettings();
       loadDefaultAmount();
@@ -89,7 +108,37 @@ export const PaymentSettings: React.FC = () => {
     
     window.addEventListener('branchChanged', handleBranchChange);
     return () => window.removeEventListener('branchChanged', handleBranchChange);
-  }, [loadQRISData, loadMootaSettings, loadDefaultAmount]);
+  }, [loadActivePaymentMethod, loadQRISData, loadMootaSettings, loadDefaultAmount]);
+
+  // Handle Payment Method Toggle
+  const handlePaymentMethodChange = (method: ActivePaymentMethod) => {
+    if (method === activePaymentMethod) return;
+    setPendingMethod(method);
+    setShowMethodChangeAlert(true);
+  };
+
+  const confirmMethodChange = () => {
+    if (pendingMethod) {
+      setActivePaymentMethod(pendingMethod);
+      localStorage.setItem('active_payment_method', pendingMethod);
+      setShowMethodChangeAlert(false);
+      setPendingMethod(null);
+      
+      // Show success message
+      if (pendingMethod === 'qris') {
+        setQrisSuccess('Metode pembayaran diubah ke QRIS');
+        setTimeout(() => setQrisSuccess(null), 3000);
+      } else {
+        setMootaSuccess('Metode pembayaran diubah ke Moota Transfer');
+        setTimeout(() => setMootaSuccess(null), 3000);
+      }
+    }
+  };
+
+  const cancelMethodChange = () => {
+    setShowMethodChangeAlert(false);
+    setPendingMethod(null);
+  };
 
   // QRIS Handlers
   const handleQrDecode = async (data: string | null, error?: string) => {
@@ -293,7 +342,7 @@ export const PaymentSettings: React.FC = () => {
 
   const resetMootaForm = () => {
     setMootaForm({
-      accessToken: '',
+      accessToken: MOOTA_API_KEY,
       bankAccountId: '',
       bankAccountName: '',
       accountNumber: '',
@@ -336,6 +385,45 @@ export const PaymentSettings: React.FC = () => {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {/* Method Change Confirmation Alert */}
+      {showMethodChangeAlert && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Ganti Metode Pembayaran?</h3>
+                <p className="text-sm text-gray-600">
+                  Anda akan mengganti metode pembayaran menjadi{' '}
+                  <strong>{pendingMethod === 'qris' ? 'QRIS' : 'Moota Transfer'}</strong>
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 mb-6">
+              Halaman booking pelanggan akan menggunakan metode pembayaran yang baru dipilih.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={cancelMethodChange}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button
+                onClick={confirmMethodChange}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Ya, Ganti
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Pengaturan Pembayaran</h1>
@@ -348,6 +436,89 @@ export const PaymentSettings: React.FC = () => {
             {activeBranch.name}
           </div>
         )}
+      </div>
+
+      {/* Active Payment Method Toggle */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Metode Pembayaran Aktif</h2>
+            <p className="text-sm text-gray-600">Pilih metode yang akan digunakan di halaman booking</p>
+          </div>
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+            activePaymentMethod === 'qris' 
+              ? 'bg-blue-100 text-blue-700' 
+              : 'bg-green-100 text-green-700'
+          }`}>
+            {activePaymentMethod === 'qris' ? 'QRIS Aktif' : 'Moota Aktif'}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-4">
+          {/* QRIS Option */}
+          <button
+            type="button"
+            onClick={() => handlePaymentMethodChange('qris')}
+            className={`p-4 rounded-xl border-2 transition-all text-left ${
+              activePaymentMethod === 'qris'
+                ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                activePaymentMethod === 'qris' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-900">QRIS</span>
+                  {activePaymentMethod === 'qris' && (
+                    <svg className="w-5 h-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">Upload bukti transfer</p>
+              </div>
+            </div>
+          </button>
+
+          {/* Moota Option */}
+          <button
+            type="button"
+            onClick={() => handlePaymentMethodChange('moota')}
+            className={`p-4 rounded-xl border-2 transition-all text-left ${
+              activePaymentMethod === 'moota'
+                ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                activePaymentMethod === 'moota' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500'
+              }`}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-900">Moota Transfer</span>
+                  {activePaymentMethod === 'moota' && (
+                    <svg className="w-5 h-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">Verifikasi otomatis</p>
+              </div>
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Payment Method Tabs */}
@@ -365,7 +536,7 @@ export const PaymentSettings: React.FC = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
               </svg>
-              QRIS (Upload Bukti)
+              Pengaturan QRIS
             </button>
             <button
               onClick={() => setActiveTab('moota')}
@@ -378,7 +549,7 @@ export const PaymentSettings: React.FC = () => {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
               </svg>
-              Moota Transfer (Otomatis)
+              Pengaturan Moota
             </button>
           </nav>
         </div>
@@ -580,26 +751,25 @@ export const PaymentSettings: React.FC = () => {
                   )}
                 </div>
 
-                {/* API Key */}
+                {/* Moota API Connection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Moota API Key <span className="text-red-500">*</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Koneksi Moota API
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      name="accessToken"
-                      value={mootaForm.accessToken}
-                      onChange={handleMootaInputChange}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                      placeholder="Masukkan API Key dari Moota"
-                      required
-                    />
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <span className="text-sm font-medium text-green-800">API Key Terkonfigurasi</span>
+                      </div>
+                    </div>
                     <button
                       type="button"
                       onClick={testMootaConnection}
-                      disabled={isTestingConnection || !mootaForm.accessToken}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
+                      disabled={isTestingConnection}
+                      className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
                     >
                       {isTestingConnection ? (
                         <>
@@ -607,16 +777,18 @@ export const PaymentSettings: React.FC = () => {
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
-                          Test...
+                          Menghubungkan...
                         </>
                       ) : (
-                        'Test Koneksi'
+                        <>
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          Hubungkan ke Moota
+                        </>
                       )}
                     </button>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Dapatkan API Key dari <a href="https://app.moota.co/developer/api" target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline">dashboard Moota</a>
-                  </p>
                 </div>
 
                 {/* Bank Selection */}

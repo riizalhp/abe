@@ -1,7 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { SecurityUtils } from '../lib/security';
 import { getStoredWorkshopId } from '../lib/WorkshopContext';
-import { getStoredBranchId } from '../lib/BranchContext';
 
 export interface QRISData {
   id?: string;
@@ -120,21 +119,14 @@ class QRISService {
     }
 
     try {
-      const branchId = getStoredBranchId();
       const workshopId = getStoredWorkshopId();
       
       // If setting as default, remove default from others
       if (qrisData.isDefault) {
-        let updateQuery = supabase
+        await supabase
           .from(this.TABLE_NAME)
           .update({ is_default: false })
           .eq('is_default', true);
-        
-        if (branchId) {
-          updateQuery = updateQuery.eq('branch_id', branchId);
-        }
-        
-        await updateQuery;
       }
 
       const insertData: any = {
@@ -143,12 +135,8 @@ class QRISService {
         is_default: qrisData.isDefault
       };
       
-      if (branchId) {
-        insertData.branch_id = branchId;
-      }
-      if (workshopId) {
-        insertData.workshop_id = workshopId;
-      }
+      // Note: workshop_id column may not exist in older schemas
+      // The table will use simple storage without multi-tenant filtering
 
       const { data, error } = await supabase
         .from(this.TABLE_NAME)
@@ -182,19 +170,11 @@ class QRISService {
   // Get all QRIS data from Supabase
   async getAllQRISData(): Promise<QRISData[]> {
     try {
-      const branchId = getStoredBranchId();
-      
-      let query = supabase
+      const { data, error } = await supabase
         .from(this.TABLE_NAME)
         .select('*')
         .order('created_at', { ascending: false })
         .limit(10);
-      
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
-
-      const { data, error } = await query;
 
       if (error) {
         console.warn('Supabase fetch failed, using localStorage:', error);
@@ -222,18 +202,11 @@ class QRISService {
   // Get default QRIS from Supabase
   async getDefaultQRIS(): Promise<QRISData | null> {
     try {
-      const branchId = getStoredBranchId();
-      
-      let query = supabase
+      const { data, error } = await supabase
         .from(this.TABLE_NAME)
         .select('*')
-        .eq('is_default', true);
-      
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
-      
-      const { data, error } = await query.single();
+        .eq('is_default', true)
+        .single();
 
       if (error || !data) {
         // Fallback to localStorage
@@ -255,19 +228,11 @@ class QRISService {
   // Update QRIS data in Supabase
   async updateQRISData(id: string, updates: Partial<QRISData>): Promise<void> {
     try {
-      const branchId = getStoredBranchId();
-      
       if (updates.isDefault) {
-        let updateQuery = supabase
+        await supabase
           .from(this.TABLE_NAME)
           .update({ is_default: false })
           .eq('is_default', true);
-        
-        if (branchId) {
-          updateQuery = updateQuery.eq('branch_id', branchId);
-        }
-        
-        await updateQuery;
       }
 
       const updateData: any = {};
@@ -275,16 +240,10 @@ class QRISService {
       if (updates.qrisString !== undefined) updateData.qris_string = updates.qrisString;
       if (updates.isDefault !== undefined) updateData.is_default = updates.isDefault;
 
-      let query = supabase
+      const { error } = await supabase
         .from(this.TABLE_NAME)
         .update(updateData)
         .eq('id', id);
-      
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
-
-      const { error } = await query;
 
       if (error) {
         console.warn('Supabase update failed, updating localStorage:', error);
@@ -301,18 +260,10 @@ class QRISService {
   // Delete QRIS data from Supabase
   async deleteQRISData(id: string): Promise<void> {
     try {
-      const branchId = getStoredBranchId();
-      
-      let query = supabase
+      const { error } = await supabase
         .from(this.TABLE_NAME)
         .delete()
         .eq('id', id);
-      
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
-
-      const { error } = await query;
 
       if (error) {
         console.warn('Supabase delete failed, deleting from localStorage:', error);

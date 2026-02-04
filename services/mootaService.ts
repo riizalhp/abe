@@ -4,7 +4,9 @@ import { getStoredWorkshopId } from '../lib/WorkshopContext';
 import { getStoredBranchId } from '../lib/BranchContext';
 
 // Moota API Configuration
-const MOOTA_API_BASE_URL = 'https://app.moota.co/api/v2';
+// Sandbox: https://app.sandbox.moota.co/api/v2
+// Production: https://app.moota.co/api/v2
+const MOOTA_API_BASE_URL = 'https://app.sandbox.moota.co/api/v2';
 
 export interface MootaSettings {
   id?: string;
