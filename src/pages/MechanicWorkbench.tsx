@@ -1,20 +1,70 @@
 import React, { useState } from 'react';
-import { Wrench, Clock, Calendar, Bot } from 'lucide-react';
-import { ServiceRecord, QueueStatus, BookingRecord } from '../../types';
+import { Wrench, Clock, Calendar, Bot, User } from 'lucide-react';
+import { ServiceRecord, QueueStatus, BookingRecord, User as UserType, Role } from '../../types';
 import { analyzeBookingWithAudio } from '../../services/geminiService';
 
 interface MechanicWorkbenchProps {
     queue: ServiceRecord[];
-    updateStatus: (id: string, status: QueueStatus) => void;
+    updateStatus: (id: string, status: QueueStatus, mechanicId?: string) => void;
     bookings: BookingRecord[];
     setBookings: (bookings: BookingRecord[]) => void;
+    users: UserType[];
+    currentUser: UserType | null;
 }
 
-const MechanicWorkbench: React.FC<MechanicWorkbenchProps> = ({ queue, updateStatus, bookings, setBookings }) => {
+const MechanicWorkbench: React.FC<MechanicWorkbenchProps> = ({ queue, updateStatus, bookings, setBookings, users, currentUser }) => {
     const [activeTab, setActiveTab] = useState<'JOBS' | 'QUEUE' | 'BOOKINGS'>('JOBS');
-    const myTasks = queue.filter(q => q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING);
+    const [selectedMechanic, setSelectedMechanic] = useState<{ [jobId: string]: string }>({});
+    const [showMechanicSelect, setShowMechanicSelect] = useState<string | null>(null);
+
+    // Get only mechanics
+    const mechanics = users.filter(u => u.role === Role.MEKANIK);
+
+    // Filter tasks based on current user role
+    const myTasks = queue.filter(q => {
+        if (currentUser?.role === Role.MEKANIK) {
+            // Mechanic only sees their own assigned jobs
+            return q.mechanicId === currentUser.id && 
+                   (q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING);
+        }
+        // Admin/Owner sees all in-progress jobs
+        return q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING;
+    });
+    
     const waitingTasks = queue.filter(q => q.status === QueueStatus.WAITING);
     const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+
+    // Check if mechanic has active job
+    const getMechanicActiveJob = (mechanicId: string, excludeJobId?: string) => {
+        return queue.find(
+            q => q.mechanicId === mechanicId && 
+                 (q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING) &&
+                 q.id !== excludeJobId
+        );
+    };
+
+    // Check if current mechanic can take new job
+    const canCurrentMechanicTakeJob = () => {
+        if (currentUser?.role !== Role.MEKANIK) return true;
+        return !getMechanicActiveJob(currentUser.id);
+    };
+
+    const handleStartJob = (jobId: string) => {
+        let mechId = selectedMechanic[jobId];
+        
+        // If current user is mechanic, use their ID
+        if (currentUser?.role === Role.MEKANIK) {
+            mechId = currentUser.id;
+        }
+        
+        if (!mechId) {
+            alert('Pilih mekanik terlebih dahulu');
+            return;
+        }
+        updateStatus(jobId, QueueStatus.PROCESS, mechId);
+        setShowMechanicSelect(null);
+        setSelectedMechanic(prev => ({ ...prev, [jobId]: '' }));
+    };
 
     const handleAnalyze = async (booking: BookingRecord) => {
         if (!booking.audioBase64) return;
@@ -54,7 +104,11 @@ const MechanicWorkbench: React.FC<MechanicWorkbenchProps> = ({ queue, updateStat
                     {myTasks.length === 0 ? (
                         <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
                             <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                            <p className="text-slate-500 font-medium">No active jobs. Pick from queue.</p>
+                            <p className="text-slate-500 font-medium">
+                                {currentUser?.role === Role.MEKANIK 
+                                    ? 'Belum ada job. Ambil dari Queue.' 
+                                    : 'Tidak ada job aktif. Assign mekanik dari Queue.'}
+                            </p>
                         </div>
                     ) : (
                         <div className="grid gap-6">
@@ -64,6 +118,15 @@ const MechanicWorkbench: React.FC<MechanicWorkbenchProps> = ({ queue, updateStat
                                         <div>
                                             <h3 className="text-2xl font-bold font-mono tracking-tight text-slate-900">{task.licensePlate}</h3>
                                             <p className="text-slate-500 font-medium">{task.vehicleModel}</p>
+                                            {/* Show assigned mechanic */}
+                                            {task.mechanicId && (
+                                                <div className="flex items-center gap-1 mt-2 text-sm text-blue-600">
+                                                    <User className="w-4 h-4" />
+                                                    <span className="font-medium">
+                                                        {users.find(u => u.id === task.mechanicId)?.name || 'Mekanik'}
+                                                    </span>
+                                                </div>
+                                            )}
                                         </div>
                                         <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide border border-blue-100">
                                             {task.status}
@@ -128,7 +191,63 @@ const MechanicWorkbench: React.FC<MechanicWorkbenchProps> = ({ queue, updateStat
                                     </td>
                                     <td className="p-5 text-slate-600 truncate max-w-xs">{task.complaint}</td>
                                     <td className="p-5 text-right">
-                                        <button onClick={() => updateStatus(task.id, QueueStatus.PROCESS)} className="text-blue-600 hover:text-blue-800 font-bold text-xs uppercase bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:border-blue-200 transition-all">Start Job</button>
+                                        {currentUser?.role === Role.MEKANIK ? (
+                                            // Mekanik langsung ambil job dengan ID sendiri
+                                            <button 
+                                                onClick={() => handleStartJob(task.id)}
+                                                disabled={!canCurrentMechanicTakeJob()}
+                                                className={`font-bold text-xs uppercase px-3 py-1.5 rounded-lg border transition-all ${
+                                                    canCurrentMechanicTakeJob() 
+                                                        ? 'text-blue-600 hover:text-blue-800 bg-blue-50 border-blue-100 hover:border-blue-200'
+                                                        : 'text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed'
+                                                }`}
+                                            >
+                                                {canCurrentMechanicTakeJob() ? 'Ambil Job' : 'Selesaikan Job Dulu'}
+                                            </button>
+                                        ) : (
+                                            // Admin/Owner: pilih mekanik dulu
+                                            showMechanicSelect === task.id ? (
+                                                <div className="flex flex-col gap-2 min-w-[180px]">
+                                                    <select
+                                                        value={selectedMechanic[task.id] || ''}
+                                                        onChange={(e) => setSelectedMechanic(prev => ({ ...prev, [task.id]: e.target.value }))}
+                                                        className="p-2 border border-slate-200 rounded-lg text-xs bg-white"
+                                                    >
+                                                        <option value="">-- Pilih Mekanik --</option>
+                                                        {mechanics.map(m => {
+                                                            const activeJob = getMechanicActiveJob(m.id);
+                                                            return (
+                                                                <option key={m.id} value={m.id} disabled={!!activeJob}>
+                                                                    {m.name} {activeJob ? `(Sibuk)` : ''}
+                                                                </option>
+                                                            );
+                                                        })}
+                                                    </select>
+                                                    <div className="flex gap-1">
+                                                        <button 
+                                                            onClick={() => handleStartJob(task.id)}
+                                                            disabled={!selectedMechanic[task.id]}
+                                                            className="flex-1 text-white bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 px-2 py-1 rounded text-xs font-bold"
+                                                        >
+                                                            Mulai
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setShowMechanicSelect(null)}
+                                                            className="px-2 py-1 border rounded text-xs"
+                                                        >
+                                                            Batal
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <button 
+                                                    onClick={() => setShowMechanicSelect(task.id)} 
+                                                    className="text-blue-600 hover:text-blue-800 font-bold text-xs uppercase bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 hover:border-blue-200 transition-all"
+                                                >
+                                                    Assign
+                                                </button>
+                                            )
+                                        )}
                                     </td>
                                 </tr>
                             ))}

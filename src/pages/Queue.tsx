@@ -1,14 +1,39 @@
 import React, { useState } from 'react';
-import { Clock, Car, Wrench, CheckCircle, AlertCircle } from 'lucide-react';
-import { ServiceRecord, QueueStatus } from '../../types';
+import { Clock, Car, Wrench, CheckCircle, AlertCircle, User } from 'lucide-react';
+import { ServiceRecord, QueueStatus, User as UserType, Role } from '../../types';
 
 interface QueueProps {
   queue: ServiceRecord[];
-  updateStatus: (id: string, status: QueueStatus) => void;
+  updateStatus: (id: string, status: QueueStatus, mechanicId?: string) => void;
+  users: UserType[];
 }
 
-const Queue: React.FC<QueueProps> = ({ queue, updateStatus }) => {
+const Queue: React.FC<QueueProps> = ({ queue, updateStatus, users }) => {
   const [filter, setFilter] = useState<'ALL' | QueueStatus>('ALL');
+  const [selectedMechanic, setSelectedMechanic] = useState<{ [jobId: string]: string }>({});
+  const [showMechanicSelect, setShowMechanicSelect] = useState<string | null>(null);
+
+  // Get only mechanics from users
+  const mechanics = users.filter(u => u.role === Role.MEKANIK);
+
+  // Check if mechanic has active job
+  const getMechanicActiveJob = (mechanicId: string) => {
+    return queue.find(
+      q => q.mechanicId === mechanicId && 
+           (q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING)
+    );
+  };
+
+  const handleStartJob = (jobId: string) => {
+    const mechId = selectedMechanic[jobId];
+    if (!mechId) {
+      alert('Pilih mekanik terlebih dahulu');
+      return;
+    }
+    updateStatus(jobId, QueueStatus.PROCESS, mechId);
+    setShowMechanicSelect(null);
+    setSelectedMechanic(prev => ({ ...prev, [jobId]: '' }));
+  };
 
   const filteredQueue = filter === 'ALL' 
     ? queue 
@@ -158,19 +183,68 @@ const Queue: React.FC<QueueProps> = ({ queue, updateStatus }) => {
                 </div>
 
                 {/* Right Section - Actions */}
-                <div className="flex flex-col gap-2 min-w-[150px]">
+                <div className="flex flex-col gap-2 min-w-[200px]">
                   {item.status === QueueStatus.WAITING && (
-                    <button
-                      onClick={() => updateStatus(item.id, QueueStatus.PROCESS)}
-                      className="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all flex items-center justify-center gap-2"
-                    >
-                      <Wrench className="w-4 h-4" />
-                      Start Job
-                    </button>
+                    <div className="space-y-2">
+                      {showMechanicSelect === item.id ? (
+                        <>
+                          <select
+                            value={selectedMechanic[item.id] || ''}
+                            onChange={(e) => setSelectedMechanic(prev => ({ ...prev, [item.id]: e.target.value }))}
+                            className="w-full p-2.5 border border-slate-200 rounded-xl text-sm bg-white"
+                          >
+                            <option value="">-- Pilih Mekanik --</option>
+                            {mechanics.map(m => {
+                              const activeJob = getMechanicActiveJob(m.id);
+                              return (
+                                <option 
+                                  key={m.id} 
+                                  value={m.id}
+                                  disabled={!!activeJob}
+                                >
+                                  {m.name} {activeJob ? `(Sibuk: ${activeJob.licensePlate})` : ''}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleStartJob(item.id)}
+                              disabled={!selectedMechanic[item.id]}
+                              className="flex-1 bg-slate-900 text-white px-3 py-2 rounded-xl font-bold text-sm hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-1"
+                            >
+                              <Wrench className="w-4 h-4" />
+                              Mulai
+                            </button>
+                            <button
+                              onClick={() => setShowMechanicSelect(null)}
+                              className="px-3 py-2 border border-slate-200 rounded-xl text-sm hover:bg-slate-50"
+                            >
+                              Batal
+                            </button>
+                          </div>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => setShowMechanicSelect(item.id)}
+                          className="bg-slate-900 text-white px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all flex items-center justify-center gap-2"
+                        >
+                          <User className="w-4 h-4" />
+                          Assign Mekanik
+                        </button>
+                      )}
+                    </div>
                   )}
                   
                   {item.status === QueueStatus.PROCESS && (
                     <>
+                      {/* Show assigned mechanic */}
+                      {item.mechanicId && (
+                        <div className="bg-blue-50 border border-blue-200 text-blue-700 px-3 py-2 rounded-xl text-xs font-medium flex items-center gap-2 mb-1">
+                          <User className="w-3 h-3" />
+                          {users.find(u => u.id === item.mechanicId)?.name || 'Mekanik'}
+                        </div>
+                      )}
                       <button
                         onClick={() => updateStatus(item.id, QueueStatus.PENDING)}
                         className="border border-amber-200 bg-amber-50 text-amber-700 px-4 py-2.5 rounded-xl font-bold text-sm hover:bg-amber-100 transition-colors flex items-center justify-center gap-2"

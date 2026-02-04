@@ -166,8 +166,22 @@ function AppContent() {
     }
   };
 
-  const updateQueueStatus = async (id: string, status: QueueStatus) => {
+  const updateQueueStatus = async (id: string, status: QueueStatus, mechanicId?: string) => {
     try {
+      // Validasi: Jika mulai pekerjaan (PROCESS), cek apakah mekanik sudah punya job aktif
+      if (status === QueueStatus.PROCESS && mechanicId) {
+        const mechanicActiveJob = queue.find(
+          q => q.mechanicId === mechanicId && 
+               (q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING) &&
+               q.id !== id
+        );
+        if (mechanicActiveJob) {
+          const mechanic = users.find(u => u.id === mechanicId);
+          alert(`Mekanik ${mechanic?.name || 'tersebut'} sedang mengerjakan ${mechanicActiveJob.licensePlate}. Selesaikan dulu sebelum mengambil job baru.`);
+          return;
+        }
+      }
+
       if (status === QueueStatus.FINISHED) {
         const item = queue.find(q => q.id === id);
         if (item) {
@@ -181,8 +195,10 @@ function AppContent() {
           refreshData();
         }
       } else {
-        await serviceRecordService.update(id, { status });
-        setQueue(queue.map(q => q.id === id ? { ...q, status } : q));
+        const updateData: any = { status };
+        if (mechanicId) updateData.mechanicId = mechanicId;
+        await serviceRecordService.update(id, updateData);
+        setQueue(queue.map(q => q.id === id ? { ...q, status, ...(mechanicId ? { mechanicId } : {}) } : q));
       }
     } catch (e) {
       console.error(e);
@@ -344,7 +360,7 @@ function AppContent() {
           } />
           <Route path="/mechanic-workbench" element={
             <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.OPERATIONS}>
-              <MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} />
+              <MechanicWorkbench queue={queue} updateStatus={updateQueueStatus} bookings={bookings} setBookings={setBookings} users={users} currentUser={currentUser} />
             </ProtectedRoute>
           } />
           <Route path="/history" element={
@@ -393,7 +409,7 @@ function AppContent() {
               <AddBranchPage />
             </ProtectedRoute>
           } />
-          <Route path="/queue" element={<Queue queue={queue} updateStatus={updateQueueStatus} />} />
+          <Route path="/queue" element={<Queue queue={queue} updateStatus={updateQueueStatus} users={users} />} />
 
           {/* Fallback for under construction */}
           <Route path="/cashier" element={<UnderConstruction />} />
