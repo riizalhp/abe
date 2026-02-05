@@ -6,7 +6,10 @@ import { getStoredBranchId } from '../lib/BranchContext';
 // Moota API Configuration
 // Sandbox: https://app.sandbox.moota.co/api/v2
 // Production: https://app.moota.co/api/v2
-const MOOTA_API_BASE_URL = 'https://app.sandbox.moota.co/api/v2';
+const MOOTA_API_BASE_URL = 'https://app.moota.co/api/v2';
+
+// Centralized API Key - not configurable by users
+const MOOTA_API_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJucWllNHN3OGxsdyIsImp0aSI6IjE1NDI2ZWU3NWY1MTFjMjk2Y2VlNmI1YTNmZmE3YjU2MTA1NjEyZWRiODI4MzRhZWVmOTc2YzNhY2ZjMTJiMDE5NGQyMWFjOWVjOTQ5YjM5IiwiaWF0IjoxNzcwMjY1NzM0LjIxODI5OCwibmJmIjoxNzcwMjY1NzM0LjIxODMwMSwiZXhwIjoxODAxODAxNzM0LjIwNDg4OSwic3ViIjoiNDMyMDEiLCJzY29wZXMiOlsiYXBpIiwidXNlciIsInVzZXJfcmVhZCIsImJhbmsiLCJiYW5rX3JlYWQiLCJtdXRhdGlvbiIsIm11dGF0aW9uX3JlYWQiXX0.SqvvspTbzKxUffLnAJp0vKXWcZzF5oVdxAN5kjgo09LmBsFIPqAaWsRrxSuPsIdWQ1qVV1FL9UjpkGPxbgWNRA2bPFKDF6kg07heFPjBVSRomHrJtslgApK6vaWH42CXyqx-TyRdwrjClx9AmM2GnOJ3oalByOzE_3dwOXg4N3xbv6V_99nQGDVzYP3TNA0RpUdtmilbAIr3eMlOPajq6CR8kwkVQPouq9Vqgy43T--H5GdLubhn6MOnTpZtVsxUu4D39pbWbAfiQIX2r3emie7B7hP1_PdCbstagKDvNLUr2mOEquf0rzlGt4fLeld7Rf2W8vYcKMCYQIRtk3kn_p4Hcu_EJh-_x7z5YjgfvxVqWKJrsJOjHRg00uNL5RXzQTHA4pQeaVL3MCfmWBUj2N6KqB2-YjBztJMIVpywWNu49Q13R5IxXcYhECGBk8MDm_XZeej0G089U8u_PRwDpdas1ZUkzGmY7SNVwwU00CiBFHPUi5ucaUYxGyTDxG22NDhv5MB00L9CqjZldcexeenahMsJAC63Q0A_8_iZAD-j52hO2UyvLE38iVJRTkZego2XiaDzrFLSr7NJ1gtviouMSbBuZ21qDeYpxr2IYeTxVDpwjT9JhkooN2ATS5eLK-czMFXE0mjdY0T2trLj5eBj2KkqeSfjHQ8tV2zht2E';
 
 export interface MootaSettings {
   id?: string;
@@ -116,17 +119,8 @@ class MootaService {
       return this.tempToken;
     }
 
-    if (this.accessToken) {
-      return this.accessToken;
-    }
-
-    const settings = await this.getActiveSettings();
-    if (!settings?.accessToken) {
-      throw new Error('Moota access token not configured. Please configure in Settings.');
-    }
-
-    this.accessToken = settings.accessToken;
-    return this.accessToken;
+    // Always use the centralized API key
+    return MOOTA_API_KEY;
   }
 
   private async makeApiRequest<T>(

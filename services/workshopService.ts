@@ -504,22 +504,36 @@ export async function getPublicWorkshopInfo(slug: string): Promise<PublicWorksho
 // ============================================
 
 export async function getWorkshopMootaSettings(workshopId: string, branchId?: string) {
-  let query = supabase
+  // First try to find branch-specific settings
+  if (branchId) {
+    const { data: branchData, error: branchError } = await supabase
+      .from('moota_settings')
+      .select('*')
+      .eq('workshop_id', workshopId)
+      .eq('branch_id', branchId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!branchError && branchData) {
+      console.log('[getWorkshopMootaSettings] Found branch-specific settings:', branchData);
+      return branchData;
+    }
+  }
+
+  // Fallback to workshop-level settings (branch_id is null or not set)
+  const { data, error } = await supabase
     .from('moota_settings')
     .select('*')
     .eq('workshop_id', workshopId)
-    .eq('is_active', true);
-
-  if (branchId) {
-    query = query.eq('branch_id', branchId);
-  }
-
-  const { data, error } = await query.maybeSingle();
+    .eq('is_active', true)
+    .maybeSingle();
 
   if (error || !data) {
+    console.log('[getWorkshopMootaSettings] No moota settings found for workshop:', workshopId);
     return null;
   }
 
+  console.log('[getWorkshopMootaSettings] Found workshop-level settings:', data);
   return data;
 }
 
