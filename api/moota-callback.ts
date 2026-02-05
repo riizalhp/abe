@@ -45,26 +45,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     console.log('[Moota Webhook] Received request');
-    
+
     // Whitelist IP Moota
     const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown';
     const mootaIp = '103.236.201.178';
-    
+
     console.log('[Moota Webhook] Client IP:', clientIp);
-    
+
     // Optional: Uncomment untuk enforce IP whitelist
     // if (clientIp !== mootaIp) {
     //   console.error('[Moota Webhook] Unauthorized IP:', clientIp);
     //   return res.status(403).json({ error: 'Forbidden: Invalid IP address' });
     // }
-    
+
     // Get raw body untuk signature verification
     const rawBody = await getRawBody(req);
     const body = JSON.parse(rawBody);
-    
+
     console.log('[Moota Webhook] Headers:', JSON.stringify(req.headers));
     console.log('[Moota Webhook] Raw body length:', rawBody.length);
-    
+
     // 1. Verify signature dari Moota
     // Moota kirim header "Signature" (kapital S)
     const signature = req.headers['signature'] as string || req.headers['Signature'] as string;
@@ -88,10 +88,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (signature !== expectedSignature) {
       console.error('[Moota Webhook] Invalid signature');
-      return res.status(401).json({ 
+      return res.status(401).json({
         error: 'Invalid signature',
         expected: expectedSignature,
-        received: signature 
+        received: signature
       });
     }
 
@@ -127,41 +127,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const description = mutation.description || mutation.note || '';
         const bookingCodeMatch = description.match(/BK-\d+-[a-z0-9]+/i);
 
-        if (!bookingCodeMatch) {
-          console.log(`[Moota Webhook] No booking code found in: ${description}`);
-          continue;
-        }
-
-        const bookingCode = bookingCodeMatch[0];
         const mutationAmount = parseFloat(mutation.amount);
         const mutationId = mutation.mutation_id || mutation.id;
 
-        console.log(`[Moota Webhook] Found booking code: ${bookingCode}, amount: ${mutationAmount}`);
+        // Match strategy:
+        // 1. Try to find booking code in description
+        // 2. If not found, try to match by exact amount (Unique Code)
 
-        // 4. Find matching payment order
-        const { data: paymentOrders, error: fetchError } = await supabase
-          .from('payment_orders')
-          .select('*')
-          .eq('order_id', bookingCode)
-          .eq('status', 'CHECKING')
-          .maybeSingle();
+        let paymentOrder;
 
-        if (fetchError) {
-          console.error(`[Moota Webhook] Error fetching payment order:`, fetchError);
-          errors++;
+        if (bookingCodeMatch) {
+          const bookingCode = bookingCodeMatch[0];
+          console.log(`[Moota Webhook] Found booking code in description: ${bookingCode}`);
+
+          const { data, error } = await supabase
+            .from('payment_orders')
+            .select('*')
+            .eq('order_id', bookingCode)
+            .in('status', ['PENDING', 'CHECKING']) // Allow PENDING too (Moota might be faster than user clicking 'Check')
+            .maybeSingle();
+
+          if (error) console.error(`[Moota Webhook] Error fetching by code:`, error);
+          paymentOrder = data;
+
+        } else {
+          // Fallback: Match by Amount (Unique Code)
+          console.log(`[Moota Webhook] No booking code in description, trying match by Amount: ${mutationAmount}`);
+
+          const { data, error } = await supabase
+            .from('payment_orders')
+            .select('*')
+            .eq('total_amount', mutationAmount)
+            .in('status', ['PENDING', 'CHECKING'])
+            .order('created_at', { ascending: false }) // Prefer latest if multiple (though unique code should prevent this)
+            .limit(1)
+            .maybeSingle();
+
+          if (error) console.error(`[Moota Webhook] Error fetching by amount:`, error);
+          paymentOrder = data;
+        }
+
+        if (!paymentOrder) {
+          console.log(`[Moota Webhook] No matching pending order found for mount: ${mutationAmount}`);
           continue;
         }
 
-        if (!paymentOrders) {
-          console.log(`[Moota Webhook] No pending payment found for: ${bookingCode}`);
-          continue;
-        }
+        const bookingCode = paymentOrder.order_id; // Get code from found order
+        console.log(`[Moota Webhook] Matched Payment Order: ${bookingCode}, expected: ${paymentOrder.total_amount}, got: ${mutationAmount}`);
 
         // 5. Verify amount matches (allow 1 rupiah difference for rounding)
-        if (Math.abs(mutationAmount - paymentOrders.total_amount) > 1) {
+        if (Math.abs(mutationAmount - paymentOrder.total_amount) > 1) {
           console.error(
             `[Moota Webhook] Amount mismatch for ${bookingCode}: ` +
-            `expected ${paymentOrders.total_amount}, got ${mutationAmount}`
+            `expected ${paymentOrder.total_amount}, got ${mutationAmount}`
           );
           continue;
         }
@@ -176,7 +194,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             mutation_id: mutationId,
             paid_at: new Date().toISOString(),
           })
-          .eq('id', paymentOrders.id);
+          .eq('id', paymentOrder.id);
 
         if (updatePaymentError) {
           console.error(`[Moota Webhook] Error updating payment:`, updatePaymentError);
@@ -189,7 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // 7. Update booking to CONFIRMED
         const { error: updateBookingError } = await supabase
           .from('bookings')
-          .update({ 
+          .update({
             status: 'CONFIRMED',
             updated_at: new Date().toISOString(),
           })
@@ -212,7 +230,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 8. Return response
     console.log(`[Moota Webhook] Completed: ${processed} processed, ${errors} errors`);
-    
+
     return res.status(200).json({
       success: true,
       processed,
