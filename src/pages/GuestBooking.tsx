@@ -109,12 +109,13 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                             const mootaSettings = await workshopService.getWorkshopMootaSettings(info.id, branch.id);
                             setMootaConfigured(!!mootaSettings);
 
-                            // Check QRIS config
-                            const qrisData = await qrisService.getAllQRISData();
+                            // Check QRIS config for this branch
+                            const qrisData = await qrisService.getAllQRISData(branch.id);
                             setQrisConfigured(qrisData.length > 0);
 
-                            // Load booking fee from workshop settings
-                            setPaymentAmount(info.bookingFee);
+                            // Load booking fee for this branch
+                            const branchFee = await workshopService.getBookingFee(info.id, branch.id);
+                            setPaymentAmount(branchFee);
                         } else {
                             setWorkshopError('Cabang tidak ditemukan');
                         }
@@ -652,8 +653,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                                             type="button"
                                                             onClick={() => setFormData({ ...formData, bookingTime: slot.time })}
                                                             className={`p-2 text-sm rounded-lg border transition-colors ${formData.bookingTime === slot.time
-                                                                    ? 'bg-primary text-white border-primary'
-                                                                    : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
+                                                                ? 'bg-primary text-white border-primary'
+                                                                : 'bg-white text-gray-600 border-gray-300 hover:border-primary'
                                                                 }`}
                                                         >
                                                             {slot.label}
@@ -842,8 +843,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                                 onClick={handlePaymentSuccess}
                                                 disabled={!paymentProof}
                                                 className={`w-full mt-6 py-4 rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2 ${paymentProof
-                                                        ? 'bg-primary text-white hover:bg-primary/90'
-                                                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                    ? 'bg-primary text-white hover:bg-primary/90'
+                                                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                                     }`}
                                             >
                                                 <span className="material-symbols-outlined">verified</span>
@@ -950,8 +951,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                                         onClick={handlePaymentSuccess}
                                                         disabled={!paymentProof}
                                                         className={`w-full mt-6 py-4 rounded-lg font-semibold text-lg transition-colors flex items-center justify-center gap-2 ${paymentProof
-                                                                ? 'bg-primary text-white hover:bg-primary/90'
-                                                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                                            ? 'bg-primary text-white hover:bg-primary/90'
+                                                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                                                             }`}
                                                     >
                                                         <span className="material-symbols-outlined">verified</span>
