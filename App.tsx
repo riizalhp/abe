@@ -29,6 +29,7 @@ import Queue from './src/pages/Queue';
 import { TimeSlotSettings } from './src/pages/TimeSlotSettings';
 import URLSettings from './src/pages/URLSettings';
 import PaymentSettings from './src/pages/PaymentSettings';
+import PendingPayments from './src/pages/PendingPayments';
 import WorkshopSettings from './src/pages/WorkshopSettings';
 import JoinWorkshop from './src/pages/JoinWorkshop';
 import AddBranchPage from './src/pages/AddBranch';
@@ -214,9 +215,10 @@ function AppContent() {
   };
 
   const handleGuestBookingSubmit = async (data: any, navigate: any) => {
+    console.log('[App] handleGuestBookingSubmit called with data:', data);
     try {
-      const newBooking = await bookingService.create({
-        bookingCode: `BK-${Math.floor(Math.random() * 10000)}`,
+      const bookingData = {
+        bookingCode: data.orderId || `BK-${Math.floor(Math.random() * 10000)}`,
         customerName: data.customerName,
         phone: data.phone,
         licensePlate: data.licensePlate,
@@ -225,19 +227,39 @@ function AppContent() {
         bookingTime: data.bookingTime,
         complaint: data.complaint,
         audioBase64: data.audioBase64,
-        status: BookingStatus.PENDING
-      });
+        // Set status PENDING - Admin akan update ke CONFIRMED setelah verifikasi
+        status: BookingStatus.PENDING,
+        // Payment info disimpan di payment_orders table, bukan di bookings
+        workshopId: data.workshopId,
+        workshopSlug: data.workshopSlug,
+      };
+      
+      console.log('[App] Creating booking with:', bookingData);
+      const newBooking = await bookingService.create(bookingData);
+      console.log('[App] Booking created:', newBooking);
+      
       setBookings([...bookings, newBooking]);
       setActiveTrackingCode(newBooking.bookingCode);
+      
+      // Jika ini dari Moota payment yang masih pending verification,
+      // jangan navigate - biarkan customer tetap di halaman menunggu verifikasi
+      if (data.paymentStatus === 'PENDING_VERIFICATION') {
+        console.log('[App] Booking created with pending payment verification:', newBooking.bookingCode);
+        return newBooking; // Return booking untuk disimpan di GuestBooking
+      }
+      
       // Navigate to tracking with workshop slug if available
       if (currentWorkshop?.slug) {
         navigate(`/tracking/${currentWorkshop.slug}`);
       } else {
         navigate('/tracking/default-workshop');
       }
+      
+      return newBooking; // Return booking
     } catch (e) {
-      console.error(e);
+      console.error('[App] Failed to submit booking:', e);
       alert("Failed to submit booking");
+      return null;
     }
   };
 
@@ -383,6 +405,11 @@ function AppContent() {
               <PaymentSettings />
             </ProtectedRoute>
           } />
+          <Route path="/pending-payments" element={
+            <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
+              <PendingPayments />
+            </ProtectedRoute>
+          } />
           <Route path="/time-slot-settings" element={
             <ProtectedRoute currentUser={currentUser} allowedRoles={ROLE_PERMISSIONS.MANAGEMENT}>
               <TimeSlotSettings />
@@ -437,7 +464,7 @@ const LoginWrapper = () => {
   return <LoginPage onBack={() => navigate('/')} />;
 };
 
-const GuestBookingWrapper = ({ onSubmit }: { onSubmit: (data: any, nav: any) => void }) => {
+const GuestBookingWrapper = ({ onSubmit }: { onSubmit: (data: any, nav: any) => Promise<any> }) => {
   const navigate = useNavigate();
   return <GuestBooking onSubmit={(data) => onSubmit(data, navigate)} onBack={() => navigate('/')} />;
 };

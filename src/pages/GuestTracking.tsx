@@ -11,14 +11,21 @@ interface GuestTrackingProps {
 
 const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initialCode }) => {
     const { workshopSlug, branchCode } = useParams<{ workshopSlug: string; branchCode?: string }>();
-    const [searchCode, setSearchCode] = useState(initialCode || '');
+    
+    // Extract booking code from URL query param if present
+    const urlParams = new URLSearchParams(window.location.search);
+    const codeFromUrl = urlParams.get('code') || initialCode || '';
+    
+    const [searchCode, setSearchCode] = useState(codeFromUrl);
     const [foundBooking, setFoundBooking] = useState<BookingRecord | null>(null);
     const [searched, setSearched] = useState(false);
-    const [showSuccess, setShowSuccess] = useState(!!initialCode);
+    const [showSuccess, setShowSuccess] = useState(!!codeFromUrl);
     const [workshopBookings, setWorkshopBookings] = useState<BookingRecord[]>([]);
     const [workshop, setWorkshop] = useState<{ name: string; slug: string } | null>(null);
     const [branchName, setBranchName] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
+    
+    console.log('[GuestTracking] Initial code from URL:', codeFromUrl);
 
     // Fetch workshop-specific bookings
     useEffect(() => {
@@ -77,10 +84,10 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                             phone,
                             vehicle_model,
                             license_plate,
-                            service_date,
-                            service_time,
+                            booking_date,
+                            booking_time,
                             status,
-                            notes,
+                            complaint,
                             created_at
                         `)
                         .eq('workshop_id', workshopData.id)
@@ -102,15 +109,17 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                             phone: data.phone,
                             vehicleModel: data.vehicle_model,
                             licensePlate: data.license_plate,
-                            serviceDate: data.service_date,
-                            serviceTime: data.service_time,
+                            bookingDate: data.booking_date,
+                            bookingTime: data.booking_time,
                             status: data.status as BookingStatus,
-                            notes: data.notes,
+                            complaint: data.complaint,
                             createdAt: data.created_at,
                             workshopId: workshopData.id,
                             workshopSlug: workshopData.slug
                         }));
                         setWorkshopBookings(mappedBookings);
+                        console.log('[GuestTracking] Loaded bookings:', mappedBookings.length);
+                        console.log('[GuestTracking] Booking codes:', mappedBookings.map(b => b.bookingCode));
                     }
                 }
             } catch (error) {
@@ -124,20 +133,31 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
     }, [workshopSlug, branchCode]);
 
     useEffect(() => {
-        if (initialCode && workshopBookings.length > 0) {
-            const booking = workshopBookings.find(b => b.bookingCode === initialCode);
+        if (codeFromUrl && workshopBookings.length > 0) {
+            console.log('[GuestTracking] Looking for booking with code:', codeFromUrl);
+            console.log('[GuestTracking] Available bookings:', workshopBookings.map(b => b.bookingCode));
+            // Case-insensitive search
+            const booking = workshopBookings.find(b => b.bookingCode.toUpperCase() === codeFromUrl.toUpperCase());
             if (booking) {
+                console.log('[GuestTracking] Booking found!', booking);
                 setFoundBooking(booking);
                 setSearched(true);
                 setShowSuccess(true);
+            } else {
+                console.log('[GuestTracking] Booking NOT found for code:', codeFromUrl);
             }
         }
-    }, [initialCode, workshopBookings]);
+    }, [codeFromUrl, workshopBookings]);
 
     const handleSearch = (e: React.FormEvent) => {
         e.preventDefault();
         setShowSuccess(false);
-        const booking = workshopBookings.find(b => b.bookingCode === searchCode.trim().toUpperCase());
+        const searchTerm = searchCode.trim().toUpperCase();
+        console.log('[GuestTracking] Searching for:', searchTerm);
+        console.log('[GuestTracking] Available bookings:', workshopBookings.map(b => b.bookingCode));
+        // Case-insensitive search
+        const booking = workshopBookings.find(b => b.bookingCode.toUpperCase() === searchTerm);
+        console.log('[GuestTracking] Search result:', booking ? 'Found' : 'Not found');
         setFoundBooking(booking || null);
         setSearched(true);
     };
@@ -345,15 +365,6 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                                         </div>
                                     </div>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
-                                        View Details
-                                    </button>
-                                    <button className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 text-sm font-medium flex items-center gap-1">
-                                        <span className="material-symbols-outlined text-sm">phone</span>
-                                        Contact Advisor
-                                    </button>
-                                </div>
                             </div>
                         </div>
 
@@ -382,17 +393,6 @@ const GuestTracking: React.FC<GuestTrackingProps> = ({ bookings, onBack, initial
                                         <p className="text-gray-900 bg-gray-50 p-3 rounded-lg text-sm">"{foundBooking.complaint}"</p>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                                <div className="flex items-center gap-3 mb-4">
-                                    <span className="material-symbols-outlined text-primary">location_on</span>
-                                    <h3 className="font-semibold text-gray-900">Service Location</h3>
-                                </div>
-                                <p className="text-gray-600 text-sm mb-3">Schedule a drop-off location nearby.</p>
-                                <button className="w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 text-sm font-medium">
-                                    Set Pickup Location
-                                </button>
                             </div>
                         </div>
                     </div>

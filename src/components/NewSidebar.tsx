@@ -71,6 +71,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentUser, onLogout }) => {
       roleRequired: [Role.ADMIN, Role.OWNER]
     },
     { 
+      path: '/pending-payments', 
+      label: 'Verifikasi Transfer', 
+      icon: 'fact_check',
+      category: 'Administration',
+      roleRequired: [Role.ADMIN, Role.OWNER, Role.KASIR]
+    },
+    { 
       path: '/time-slot-settings', 
       label: 'Time Slots', 
       icon: 'schedule',

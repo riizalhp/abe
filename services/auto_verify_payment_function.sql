@@ -3,20 +3,49 @@
 -- Deploy via SQL Editor (NO CLI NEEDED!)
 -- ============================================
 
+-- 0. Add required columns if not exist
+ALTER TABLE bookings
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW();
+
+ALTER TABLE payment_orders
+ADD COLUMN IF NOT EXISTS mutation_id VARCHAR(255);
+
+ALTER TABLE payment_orders
+ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP;
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_payment_orders_mutation_id ON payment_orders (mutation_id);
+
+CREATE INDEX IF NOT EXISTS idx_bookings_status ON bookings (status);
+
+CREATE INDEX IF NOT EXISTS idx_bookings_booking_code ON bookings (booking_code);
+
 -- 1. Create function untuk auto-verify payment
 CREATE OR REPLACE FUNCTION auto_verify_payment_on_update()
 RETURNS TRIGGER AS $$
+DECLARE
+  current_booking_status VARCHAR(50);
 BEGIN
   -- Jika status berubah menjadi PAID
   IF NEW.status = 'PAID' AND OLD.status != 'PAID' THEN
-    -- Update booking status menjadi CONFIRMED
-    UPDATE bookings
-    SET 
-      status = 'CONFIRMED',
-      updated_at = NOW()
+    -- Cek status booking saat ini
+    SELECT status INTO current_booking_status
+    FROM bookings
     WHERE booking_code = NEW.order_id;
     
-    RAISE NOTICE 'Payment % verified, booking % confirmed', NEW.order_id, NEW.order_id;
+    -- Jika booking masih PENDING atau PENDING_REVIEW, update ke CONFIRMED
+    -- Jika sudah CHECKED_IN atau status lain, biarkan (jangan override)
+    IF current_booking_status IN ('PENDING', 'PENDING_REVIEW', 'PENDING_VERIFICATION') THEN
+      UPDATE bookings
+      SET 
+        status = 'CONFIRMED',
+        updated_at = NOW()
+      WHERE booking_code = NEW.order_id;
+      
+      RAISE NOTICE 'Payment % verified, booking % updated to CONFIRMED', NEW.order_id, NEW.order_id;
+    ELSE
+      RAISE NOTICE 'Payment % verified, booking % status % preserved', NEW.order_id, NEW.order_id, current_booking_status;
+    END IF;
   END IF;
   
   RETURN NEW;

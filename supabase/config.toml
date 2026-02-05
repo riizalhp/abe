@@ -1,0 +1,4 @@
+verify_jwt = false
+
+[functions.moota-callback]
+verify_jwt = false

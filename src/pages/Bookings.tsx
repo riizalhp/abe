@@ -9,13 +9,31 @@ interface BookingsProps {
     bookings: BookingRecord[];
     setBookings: (bookings: BookingRecord[]) => void;
     onAddToQueue: (data: Partial<ServiceRecord>) => void;
+    onRefresh?: () => void; // Optional callback to refresh bookings
 }
 
-const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue }) => {
+const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue, onRefresh }) => {
     const [selectedBooking, setSelectedBooking] = useState<BookingRecord | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [showPayment, setShowPayment] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState<number>(0);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+
+    const handleRefresh = async () => {
+        setIsRefreshing(true);
+        if (onRefresh) {
+            await onRefresh();
+        } else {
+            // Fallback: reload bookings directly
+            try {
+                const refreshedBookings = await bookingService.getAll();
+                setBookings(refreshedBookings);
+            } catch (error) {
+                console.error('Failed to refresh bookings:', error);
+            }
+        }
+        setIsRefreshing(false);
+    };
 
     const handleUpdateStatus = async (id: string, status: BookingStatus) => {
         try {
@@ -108,6 +126,16 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                     </h1>
                     <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage customer booking requests</p>
                 </div>
+                <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                    <span className={`material-symbols-outlined text-base ${isRefreshing ? 'animate-spin' : ''}`}>
+                        refresh
+                    </span>
+                    <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+                </button>
             </div>
             {/* Bookings Table */}
             <div className="bg-white dark:bg-[#1A2230] rounded-xl border border-border-light dark:border-slate-800 shadow-soft overflow-hidden">

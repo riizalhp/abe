@@ -1,53 +1,29 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { QRISUploader } from '../components/QRISUploader';
 import qrisService, { QRISData } from '../../services/qrisService';
-import mootaService, { MootaSettings as MootaSettingsData, MootaBankAccount } from '../../services/mootaService';
 import workshopService from '../../services/workshopService';
 import { useBranch } from '../../lib/BranchContext';
 
-type PaymentTab = 'qris' | 'moota';
 type ActivePaymentMethod = 'qris' | 'moota';
-
-// Hardcoded Moota API Key - Central configuration, not user configurable
-const MOOTA_API_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJucWllNHN3OGxsdyIsImp0aSI6IjE1NDI2ZWU3NWY1MTFjMjk2Y2VlNmI1YTNmZmE3YjU2MTA1NjEyZWRiODI4MzRhZWVmOTc2YzNhY2ZjMTJiMDE5NGQyMWFjOWVjOTQ5YjM5IiwiaWF0IjoxNzcwMjY1NzM0LjIxODI5OCwibmJmIjoxNzcwMjY1NzM0LjIxODMwMSwiZXhwIjoxODAxODAxNzM0LjIwNDg4OSwic3ViIjoiNDMyMDEiLCJzY29wZXMiOlsiYXBpIiwidXNlciIsInVzZXJfcmVhZCIsImJhbmsiLCJiYW5rX3JlYWQiLCJtdXRhdGlvbiIsIm11dGF0aW9uX3JlYWQiXX0.SqvvspTbzKxUffLnAJp0vKXWcZzF5oVdxAN5kjgo09LmBsFIPqAaWsRrxSuPsIdWQ1qVV1FL9UjpkGPxbgWNRA2bPFKDF6kg07heFPjBVSRomHrJtslgApK6vaWH42CXyqx-TyRdwrjClx9AmM2GnOJ3oalByOzE_3dwOXg4N3xbv6V_99nQGDVzYP3TNA0RpUdtmilbAIr3eMlOPajq6CR8kwkVQPouq9Vqgy43T--H5GdLubhn6MOnTpZtVsxUu4D39pbWbAfiQIX2r3emie7B7hP1_PdCbstagKDvNLUr2mOEquf0rzlGt4fLeld7Rf2W8vYcKMCYQIRtk3kn_p4Hcu_EJh-_x7z5YjgfvxVqWKJrsJOjHRg00uNL5RXzQTHA4pQeaVL3MCfmWBUj2N6KqB2-YjBztJMIVpywWNu49Q13R5IxXcYhECGBk8MDm_XZeej0G089U8u_PRwDpdas1ZUkzGmY7SNVwwU00CiBFHPUi5ucaUYxGyTDxG22NDhv5MB00L9CqjZldcexeenahMsJAC63Q0A_8_iZAD-j52hO2UyvLE38iVJRTkZego2XiaDzrFLSr7NJ1gtviouMSbBuZ21qDeYpxr2IYeTxVDpwjT9JhkooN2ATS5eLK-czMFXE0mjdY0T2trLj5eBj2KkqeSfjHQ8tV2zht2E';
 
 export const PaymentSettings: React.FC = () => {
   const { activeBranch } = useBranch();
-  const [activeTab, setActiveTab] = useState<PaymentTab>('qris');
-  
+
   // Active Payment Method Toggle
   const [activePaymentMethod, setActivePaymentMethod] = useState<ActivePaymentMethod>('qris');
   const [showMethodChangeAlert, setShowMethodChangeAlert] = useState(false);
   const [pendingMethod, setPendingMethod] = useState<ActivePaymentMethod | null>(null);
-  
+
   // QRIS State
   const [qrisData, setQrisData] = useState<QRISData[]>([]);
   const [qrisLoading, setQrisLoading] = useState(false);
   const [qrisError, setQrisError] = useState<string | null>(null);
   const [qrisSuccess, setQrisSuccess] = useState<string | null>(null);
   const [defaultAmount, setDefaultAmount] = useState<number>(50000);
-  
-  // Moota State
-  const [mootaSettings, setMootaSettings] = useState<MootaSettingsData[]>([]);
-  const [mootaLoading, setMootaLoading] = useState(false);
-  const [mootaError, setMootaError] = useState<string | null>(null);
-  const [mootaSuccess, setMootaSuccess] = useState<string | null>(null);
-  const [bankAccounts, setBankAccounts] = useState<MootaBankAccount[]>([]);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
-  
-  // Moota Form
-  const [mootaForm, setMootaForm] = useState({
-    accessToken: MOOTA_API_KEY,
-    bankAccountId: '',
-    bankAccountName: '',
-    accountNumber: '',
-    bankType: '',
-    uniqueCodeStart: 1,
-    uniqueCodeEnd: 999,
-    isActive: true
-  });
-  const [isEditingMoota, setIsEditingMoota] = useState(false);
-  const [editingMootaId, setEditingMootaId] = useState<string | null>(null);
+
+  // Debounce timer for booking fee
+  const bookingFeeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSavingBookingFee, setIsSavingBookingFee] = useState(false);
 
   // Load Active Payment Method
   const loadActivePaymentMethod = useCallback(() => {
@@ -57,11 +33,14 @@ export const PaymentSettings: React.FC = () => {
     }
   }, []);
 
+
+
   // Load QRIS Data
   const loadQRISData = useCallback(async () => {
     setQrisLoading(true);
     try {
-      const data = await qrisService.getAllQRISData();
+      // Pass activeBranch.id if available
+      const data = await qrisService.getAllQRISData(activeBranch?.id);
       setQrisData(data);
     } catch (error) {
       console.error('Failed to load QRIS data:', error);
@@ -69,70 +48,101 @@ export const PaymentSettings: React.FC = () => {
     } finally {
       setQrisLoading(false);
     }
-  }, []);
-
-  // Load Moota Settings
-  const loadMootaSettings = useCallback(async () => {
-    setMootaLoading(true);
-    try {
-      const data = await mootaService.getAllSettings();
-      setMootaSettings(data);
-    } catch (err) {
-      setMootaError('Gagal memuat pengaturan Moota');
-    } finally {
-      setMootaLoading(false);
-    }
-  }, []);
+  }, [activeBranch]);
 
   // Load default amount from Supabase workshop settings
-  // Also migrates from localStorage if Supabase is empty
   const loadDefaultAmount = useCallback(async () => {
     try {
-      const workshopId = workshopService.getCurrentWorkshopId();
+      // Try getting ID from service first
+      let workshopId = workshopService.getCurrentWorkshopId();
+
+      // Fallback 1: Use active branch's workshop ID ( Most reliable if branch is selected)
+      if (!workshopId && activeBranch?.workshopId) {
+        console.log('[PaymentSettings] Retrieved workshop ID from activeBranch:', activeBranch.workshopId);
+        workshopId = activeBranch.workshopId;
+        workshopService.setCurrentWorkshop(workshopId);
+      }
+
+      // Fallback 2: LocalStorage
+      if (!workshopId) {
+        const storedId = localStorage.getItem('currentWorkshopId');
+        if (storedId) {
+          console.log('[PaymentSettings] Retrieved workshop ID from localStorage fallback:', storedId);
+          workshopId = storedId;
+          workshopService.setCurrentWorkshop(storedId);
+        }
+      }
+
+      console.log('[PaymentSettings] Loading booking fee for workshop:', workshopId, 'branch:', activeBranch?.id);
+
       if (workshopId) {
-        const bookingFee = await workshopService.getBookingFee(workshopId);
-        
-        // Check if we need to migrate from localStorage
-        // If Supabase has default (25000) but localStorage has different value, migrate it
-        const localStorageFee = localStorage.getItem('booking_fee');
-        if (localStorageFee) {
-          const localFee = parseInt(localStorageFee, 10);
-          if (!isNaN(localFee) && localFee !== bookingFee && localFee > 0) {
-            console.log('[PaymentSettings] Migrating booking_fee from localStorage to Supabase:', localFee);
-            await workshopService.updateBookingFee(workshopId, localFee);
-            setDefaultAmount(localFee);
-            // Clear localStorage after migration
-            localStorage.removeItem('booking_fee');
-            return;
+        // Pass activeBranch.id to get specific fee if exists
+        const bookingFee = await workshopService.getBookingFee(workshopId, activeBranch?.id);
+        console.log('[PaymentSettings] Fetched booking fee from service:', bookingFee);
+
+        // Validation: bookingFee must be a number
+        if (typeof bookingFee !== 'number' || isNaN(bookingFee)) {
+          console.warn('[PaymentSettings] Invalid booking fee received, defaulting to 25000');
+          setDefaultAmount(25000);
+          return;
+        }
+
+        // Check if we need to migrate from localStorage (Only for global/legacy)
+        if (!activeBranch) {
+          const localStorageFee = localStorage.getItem('booking_fee');
+          if (localStorageFee) {
+            const localFee = parseInt(localStorageFee, 10);
+            console.log('[PaymentSettings] Found local storage fee:', localFee);
+
+            if (!isNaN(localFee) && localFee !== bookingFee && localFee > 0) {
+              console.log('[PaymentSettings] Migrating booking_fee from localStorage to Supabase:', localFee);
+              const migrationResult = await workshopService.updateBookingFee(workshopId, localFee);
+
+              if (migrationResult.success) {
+                console.log('[PaymentSettings] Migration successful');
+                setDefaultAmount(localFee);
+                localStorage.removeItem('booking_fee');
+              } else {
+                console.error('[PaymentSettings] Migration failed:', migrationResult.error);
+                setDefaultAmount(bookingFee);
+              }
+              return;
+            }
           }
         }
-        
+
         setDefaultAmount(bookingFee);
+      } else {
+        console.warn('[PaymentSettings] No workshop ID found - context might not be ready');
+        setTimeout(async () => {
+          const retryId = workshopService.getCurrentWorkshopId();
+          if (retryId) {
+            console.log('[PaymentSettings] Retry found workshop ID:', retryId);
+            const fee = await workshopService.getBookingFee(retryId, activeBranch?.id);
+            setDefaultAmount(fee);
+          }
+        }, 1000);
       }
     } catch (error) {
-      console.error('Error loading booking fee:', error);
-      setDefaultAmount(25000); // Default fallback
+      console.error('[PaymentSettings] Error loading booking fee:', error);
+      setDefaultAmount(25000);
     }
-  }, []);
+  }, [activeBranch]);
 
   useEffect(() => {
     loadActivePaymentMethod();
     loadQRISData();
-    loadMootaSettings();
     loadDefaultAmount();
-    
-    // Listen for branch change
+
     const handleBranchChange = () => {
       loadActivePaymentMethod();
       loadQRISData();
-      loadMootaSettings();
       loadDefaultAmount();
-      resetMootaForm();
     };
-    
+
     window.addEventListener('branchChanged', handleBranchChange);
     return () => window.removeEventListener('branchChanged', handleBranchChange);
-  }, [loadActivePaymentMethod, loadQRISData, loadMootaSettings, loadDefaultAmount]);
+  }, [loadActivePaymentMethod, loadQRISData, loadDefaultAmount]);
 
   // Handle Payment Method Toggle
   const handlePaymentMethodChange = (method: ActivePaymentMethod) => {
@@ -147,15 +157,8 @@ export const PaymentSettings: React.FC = () => {
       localStorage.setItem('active_payment_method', pendingMethod);
       setShowMethodChangeAlert(false);
       setPendingMethod(null);
-      
-      // Show success message
-      if (pendingMethod === 'qris') {
-        setQrisSuccess('Metode pembayaran diubah ke QRIS');
-        setTimeout(() => setQrisSuccess(null), 3000);
-      } else {
-        setMootaSuccess('Metode pembayaran diubah ke Moota Transfer');
-        setTimeout(() => setMootaSuccess(null), 3000);
-      }
+      setQrisSuccess(`Metode pembayaran diubah ke ${pendingMethod === 'qris' ? 'QRIS' : 'Moota Transfer'}`);
+      setTimeout(() => setQrisSuccess(null), 3000);
     }
   };
 
@@ -165,21 +168,22 @@ export const PaymentSettings: React.FC = () => {
   };
 
   // QRIS Handlers
+  // QRIS Handlers
+  const [scannedQR, setScannedQR] = useState<{ raw: string; merchant: string } | null>(null);
+
   const handleQrDecode = async (data: string | null, error?: string) => {
     setQrisError(null);
     setQrisSuccess(null);
 
     if (error) {
-      setQrisError(error);
+      // setQrisError(error); // Optional: don't show scan errors immediately as it scans continuously
       return;
     }
 
-    if (!data) {
-      setQrisError('Data QRIS tidak ditemukan');
-      return;
-    }
+    if (!data) return;
 
-    setQrisLoading(true);
+    // Avoid repetitive setting if same data
+    if (scannedQR?.raw === data) return;
 
     try {
       if (!qrisService.validateQRIS(data)) {
@@ -187,18 +191,34 @@ export const PaymentSettings: React.FC = () => {
       }
 
       const merchantName = qrisService.getMerchantName(data);
-      const existingQris = qrisData.find(qris => qris.qrisString === data);
+      setScannedQR({ raw: data, merchant: merchantName });
+      setQrisSuccess(`QRIS terbaca valid! Merchant: ${merchantName}. Silakan klik Simpan.`);
+    } catch (error) {
+      setQrisError('QR Code tidak valid sebagai QRIS Indonesia Standard.');
+    }
+  };
+
+  const handleManualSaveQRIS = async () => {
+    if (!scannedQR) return;
+
+    setQrisLoading(true);
+    setQrisError(null);
+
+    try {
+      const existingQris = qrisData.find(qris => qris.qrisString === scannedQR.raw);
       if (existingQris) {
-        throw new Error('QRIS ini sudah ditambahkan');
+        throw new Error('QRIS ini sudah ada di daftar tersimpan');
       }
 
       await qrisService.saveQRISData({
-        merchantName,
-        qrisString: data,
-        isDefault: qrisData.length === 0
-      });
+        merchantName: scannedQR.merchant,
+        qrisString: scannedQR.raw,
+        isDefault: qrisData.length === 0,
+        branchId: activeBranch?.id
+      } as any);
 
-      setQrisSuccess(`QRIS untuk ${merchantName} berhasil disimpan`);
+      setQrisSuccess(`QRIS ${scannedQR.merchant} berhasil disimpan!`);
+      setScannedQR(null); // Clear preview
       await loadQRISData();
     } catch (error) {
       setQrisError(error instanceof Error ? error.message : 'Gagal menyimpan QRIS');
@@ -223,15 +243,10 @@ export const PaymentSettings: React.FC = () => {
     }
   };
 
-  const handleAmountChange = async (value: string) => {
+  const handleAmountChange = (value: string) => {
     const numValue = parseInt(value.replace(/\D/g, ''), 10);
     if (isNaN(numValue)) {
       setDefaultAmount(0);
-      // Save to Supabase
-      const workshopId = workshopService.getCurrentWorkshopId();
-      if (workshopId) {
-        await workshopService.updateBookingFee(workshopId, 0);
-      }
       return;
     }
 
@@ -241,167 +256,57 @@ export const PaymentSettings: React.FC = () => {
     }
 
     setDefaultAmount(numValue);
-    
-    // Save to Supabase
-    const workshopId = workshopService.getCurrentWorkshopId();
-    if (workshopId) {
-      const result = await workshopService.updateBookingFee(workshopId, numValue);
-      if (result.success) {
-        setQrisSuccess('Nominal default berhasil diperbarui');
-        setTimeout(() => setQrisSuccess(null), 3000);
-      } else {
-        setQrisError('Gagal menyimpan nominal');
-        setTimeout(() => setQrisError(null), 3000);
-      }
-    }
   };
 
-  // Moota Handlers
-  const testMootaConnection = async () => {
-    if (!mootaForm.accessToken) {
-      setMootaError('Masukkan API Key terlebih dahulu');
+  const handleSaveBookingFee = async () => {
+    console.log('[PaymentSettings] Saving booking fee...', defaultAmount);
+    setIsSavingBookingFee(true);
+
+    let workshopId = workshopService.getCurrentWorkshopId();
+
+    // Fallback: activeBranch
+    if (!workshopId && activeBranch?.workshopId) {
+      workshopId = activeBranch.workshopId;
+    }
+
+    // Fallback: localStorage
+    if (!workshopId) {
+      workshopId = localStorage.getItem('currentWorkshopId');
+    }
+
+    if (!workshopId) {
+      console.error('[PaymentSettings] Cannot save: No workshop ID');
+      setQrisError('Workshop ID tidak ditemukan - Silakan refresh halaman');
+      setIsSavingBookingFee(false);
       return;
     }
 
-    setIsTestingConnection(true);
-    setMootaError(null);
-    setMootaSuccess(null);
+    // Pass activeBranch.id
+    const result = await workshopService.updateBookingFee(workshopId, defaultAmount, activeBranch?.id);
+    console.log('[PaymentSettings] Save result:', result);
 
-    try {
-      mootaService.setTempToken(mootaForm.accessToken);
-      const result = await mootaService.testConnection();
-      
-      if (result.success && result.bankAccounts) {
-        setBankAccounts(result.bankAccounts);
-        setMootaSuccess(result.message);
-      } else {
-        setMootaError(result.message);
+    if (result.success) {
+      setQrisSuccess(`Nominal berhasil disimpan${activeBranch ? ` untuk ${activeBranch.name}` : ''}`);
+      // Reload to confirm persistence
+      await loadDefaultAmount();
+      setTimeout(() => setQrisSuccess(null), 3000);
+    } else {
+      console.error('[PaymentSettings] Save failed:', result.error);
+      setQrisError(`Gagal menyimpan nominal: ${result.error}`);
+      setTimeout(() => setQrisError(null), 3000);
+    }
+
+    setIsSavingBookingFee(false);
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (bookingFeeTimeoutRef.current) {
+        clearTimeout(bookingFeeTimeoutRef.current);
       }
-    } catch (err) {
-      setMootaError(err instanceof Error ? err.message : 'Koneksi gagal');
-    } finally {
-      mootaService.clearTempToken();
-      setIsTestingConnection(false);
-    }
-  };
-
-  const handleMootaInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
-    setMootaForm(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : 
-              type === 'number' ? parseInt(value) || 0 : value
-    }));
-  };
-
-  const handleBankSelect = (bankId: string) => {
-    const bank = bankAccounts.find(b => b.bank_id === bankId);
-    if (bank) {
-      setMootaForm(prev => ({
-        ...prev,
-        bankAccountId: bank.bank_id,
-        bankAccountName: bank.atas_nama,
-        accountNumber: bank.account_number,
-        bankType: bank.bank_type
-      }));
-    }
-  };
-
-  const handleMootaSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMootaLoading(true);
-    setMootaError(null);
-    setMootaSuccess(null);
-
-    try {
-      if (editingMootaId) {
-        await mootaService.updateSettings(editingMootaId, mootaForm);
-        setMootaSuccess('Pengaturan berhasil diperbarui');
-      } else {
-        await mootaService.saveSettings({
-          ...mootaForm,
-          secretToken: generateSecretToken(),
-          webhookUrl: ''
-        });
-        setMootaSuccess('Pengaturan berhasil disimpan');
-      }
-
-      resetMootaForm();
-      await loadMootaSettings();
-    } catch (err) {
-      setMootaError(err instanceof Error ? err.message : 'Gagal menyimpan pengaturan');
-    } finally {
-      setMootaLoading(false);
-    }
-  };
-
-  const handleEditMoota = (setting: MootaSettingsData) => {
-    setMootaForm({
-      accessToken: setting.accessToken,
-      bankAccountId: setting.bankAccountId,
-      bankAccountName: setting.bankAccountName,
-      accountNumber: setting.accountNumber,
-      bankType: setting.bankType,
-      uniqueCodeStart: setting.uniqueCodeStart,
-      uniqueCodeEnd: setting.uniqueCodeEnd,
-      isActive: setting.isActive
-    });
-    setEditingMootaId(setting.id || null);
-    setIsEditingMoota(true);
-  };
-
-  const handleDeleteMoota = async (id: string) => {
-    if (!window.confirm('Yakin ingin menghapus pengaturan ini?')) return;
-
-    setMootaLoading(true);
-    try {
-      await mootaService.deleteSettings(id);
-      setMootaSuccess('Pengaturan berhasil dihapus');
-      await loadMootaSettings();
-    } catch (err) {
-      setMootaError('Gagal menghapus pengaturan');
-    } finally {
-      setMootaLoading(false);
-    }
-  };
-
-  const handleSetActiveMoota = async (id: string) => {
-    setMootaLoading(true);
-    try {
-      await mootaService.updateSettings(id, { isActive: true });
-      setMootaSuccess('Rekening aktif berhasil diperbarui');
-      await loadMootaSettings();
-    } catch (err) {
-      setMootaError('Gagal memperbarui');
-    } finally {
-      setMootaLoading(false);
-    }
-  };
-
-  const resetMootaForm = () => {
-    setMootaForm({
-      accessToken: MOOTA_API_KEY,
-      bankAccountId: '',
-      bankAccountName: '',
-      accountNumber: '',
-      bankType: '',
-      uniqueCodeStart: 1,
-      uniqueCodeEnd: 999,
-      isActive: true
-    });
-    setEditingMootaId(null);
-    setIsEditingMoota(false);
-    setBankAccounts([]);
-  };
-
-  const generateSecretToken = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let token = '';
-    for (let i = 0; i < 32; i++) {
-      token += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return token;
-  };
+    };
+  }, []);
 
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat('id-ID', {
@@ -464,16 +369,21 @@ export const PaymentSettings: React.FC = () => {
 
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Pengaturan Pembayaran</h1>
-        <p className="text-gray-600 mt-1">
-          Konfigurasi metode pembayaran untuk booking pelanggan
-        </p>
-        {activeBranch && (
-          <div className="mt-2 inline-flex items-center px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
-            <span className="material-symbols-outlined text-sm mr-1">store</span>
-            {activeBranch.name}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold text-slate-800">Pengaturan Pembayaran</h1>
+          {activeBranch ? (
+            <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-bold rounded-full border border-blue-200 shadow-sm flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">store</span>
+              {activeBranch.name}
+            </span>
+          ) : (
+            <span className="px-3 py-1 bg-slate-100 text-slate-600 text-xs font-bold rounded-full border border-slate-200 shadow-sm flex items-center gap-1">
+              <span className="material-symbols-outlined text-[14px]">domain</span>
+              Global Settings
+            </span>
+          )}
+        </div>
+        <p className="text-slate-600 mt-1">Kelola metode pembayaran dan biaya booking{!activeBranch && ' (Mode Workshop Global)'}.</p>
       </div>
 
       {/* Active Payment Method Toggle */}
@@ -483,30 +393,27 @@ export const PaymentSettings: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900">Metode Pembayaran Aktif</h2>
             <p className="text-sm text-gray-600">Pilih metode yang akan digunakan di halaman booking</p>
           </div>
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-            activePaymentMethod === 'qris' 
-              ? 'bg-blue-100 text-blue-700' 
-              : 'bg-green-100 text-green-700'
-          }`}>
+          <div className={`px-3 py-1 rounded-full text-sm font-medium ${activePaymentMethod === 'qris'
+            ? 'bg-blue-100 text-blue-700'
+            : 'bg-green-100 text-green-700'
+            }`}>
             {activePaymentMethod === 'qris' ? 'QRIS Aktif' : 'Moota Aktif'}
           </div>
         </div>
-        
+
         <div className="grid grid-cols-2 gap-4">
           {/* QRIS Option */}
           <button
             type="button"
             onClick={() => handlePaymentMethodChange('qris')}
-            className={`p-4 rounded-xl border-2 transition-all text-left ${
-              activePaymentMethod === 'qris'
-                ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
+            className={`p-4 rounded-xl border-2 transition-all text-left ${activePaymentMethod === 'qris'
+              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+              : 'border-gray-200 hover:border-gray-300'
+              }`}
           >
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                activePaymentMethod === 'qris' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
-              }`}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${activePaymentMethod === 'qris' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-500'
+                }`}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
                 </svg>
@@ -529,16 +436,14 @@ export const PaymentSettings: React.FC = () => {
           <button
             type="button"
             onClick={() => handlePaymentMethodChange('moota')}
-            className={`p-4 rounded-xl border-2 transition-all text-left ${
-              activePaymentMethod === 'moota'
-                ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
-                : 'border-gray-200 hover:border-gray-300'
-            }`}
+            className={`p-4 rounded-xl border-2 transition-all text-left ${activePaymentMethod === 'moota'
+              ? 'border-green-500 bg-green-50 ring-2 ring-green-200'
+              : 'border-gray-200 hover:border-gray-300'
+              }`}
           >
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                activePaymentMethod === 'moota' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500'
-              }`}>
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${activePaymentMethod === 'moota' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500'
+                }`}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
                 </svg>
@@ -574,19 +479,41 @@ export const PaymentSettings: React.FC = () => {
             </p>
           </div>
         </div>
-        
+
         <div className="max-w-md">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="text-gray-500 text-sm">Rp</span>
+          <div className="flex gap-3">
+            <div className="relative flex-1">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <span className="text-gray-500 text-sm">Rp</span>
+              </div>
+              <input
+                type="text"
+                value={defaultAmount.toLocaleString('id-ID')}
+                onChange={(e) => handleAmountChange(e.target.value)}
+                className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg font-semibold"
+                placeholder="50.000"
+              />
             </div>
-            <input
-              type="text"
-              value={defaultAmount.toLocaleString('id-ID')}
-              onChange={(e) => handleAmountChange(e.target.value)}
-              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg font-semibold"
-              placeholder="50.000"
-            />
+            <button
+              onClick={handleSaveBookingFee}
+              disabled={isSavingBookingFee}
+              className="px-6 py-3 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 whitespace-nowrap"
+            >
+              {isSavingBookingFee ? (
+                <>
+                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Menyimpan...
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined text-sm">save</span>
+                  Simpan
+                </>
+              )}
+            </button>
           </div>
           <p className="mt-2 text-sm text-gray-500">
             Biaya booking saat ini: <span className="font-semibold text-purple-600">{formatCurrency(defaultAmount)}</span>
@@ -594,389 +521,178 @@ export const PaymentSettings: React.FC = () => {
         </div>
       </div>
 
-      {/* Payment Method Tabs */}
-      <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
-        <div className="border-b border-gray-200">
-          <nav className="flex -mb-px">
-            <button
-              onClick={() => setActiveTab('qris')}
-              className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'qris'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-              </svg>
-              Pengaturan QRIS
-            </button>
-            <button
-              onClick={() => setActiveTab('moota')}
-              className={`px-6 py-4 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
-                activeTab === 'moota'
-                  ? 'border-green-500 text-green-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-              </svg>
-              Pengaturan Moota
-            </button>
-          </nav>
+      {/* Alert Messages */}
+      {qrisError && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-red-700 flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            {qrisError}
+          </p>
+        </div>
+      )}
+
+      {qrisSuccess && (
+        <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+          <p className="text-green-700 flex items-center">
+            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            {qrisSuccess}
+          </p>
+        </div>
+      )}
+
+      {/* QRIS Settings Section */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Pengaturan QRIS</h2>
+            <p className="text-sm text-gray-600">Upload dan kelola QR Code QRIS untuk pembayaran</p>
+          </div>
         </div>
 
-        {/* Tab Content */}
-        <div className="p-6">
-          {/* QRIS Tab */}
-          {activeTab === 'qris' && (
-            <div className="space-y-6">
-              {/* Info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-start">
-                  <svg className="w-5 h-5 text-blue-500 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-medium text-blue-800">Metode QRIS dengan Upload Bukti</p>
-                    <p className="text-sm text-blue-600 mt-1">
-                      Pelanggan akan melihat QRIS statis Anda dan harus upload bukti pembayaran. 
-                      Verifikasi dilakukan manual oleh kasir.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Alert Messages */}
-              {qrisError && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-700 flex items-center">
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    {qrisError}
-                  </p>
-                </div>
-              )}
-              
-              {qrisSuccess && (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-700 flex items-center">
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    {qrisSuccess}
-                  </p>
-                </div>
-              )}
-
-              {/* Upload Section */}
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload QRIS Baru</h3>
-                <QRISUploader onQrDecode={handleQrDecode} />
-              </div>
-
-              {/* Saved QRIS List */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  QRIS Tersimpan ({qrisData.length})
-                </h3>
-
-                {qrisData.length === 0 ? (
-                  <div className="text-center py-8 bg-gray-50 rounded-lg">
-                    <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                    <p className="text-gray-500">Belum ada QRIS tersimpan</p>
-                    <p className="text-gray-400 text-sm">Upload QRIS pertama Anda di atas</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {qrisData.map((qris) => (
-                      <div
-                        key={qris.id}
-                        className={`border rounded-lg p-4 ${
-                          qris.isDefault ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center">
-                              <h4 className="font-medium text-gray-900">{qris.merchantName}</h4>
-                              {qris.isDefault && (
-                                <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
-                                  Default
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-500 mt-1">
-                              Ditambahkan: {formatDate(qris.createdAt)}
-                            </p>
-                          </div>
-                          
-                          <div className="flex space-x-2">
-                            {!qris.isDefault && (
-                              <button
-                                onClick={() => handleSetDefaultQRIS(qris.id!)}
-                                className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded hover:bg-blue-200"
-                              >
-                                Set Default
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDeleteQRIS(qris.id!)}
-                              className="px-3 py-1 bg-red-100 text-red-700 text-sm font-medium rounded hover:bg-red-200"
-                            >
-                              Hapus
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+        {/* Info */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-blue-500 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-blue-800">Metode QRIS dengan Upload Bukti</p>
+              <p className="text-sm text-blue-600 mt-1">
+                Pelanggan akan melihat QRIS statis Anda dan harus upload bukti pembayaran.
+                Verifikasi dilakukan manual oleh kasir.
+              </p>
             </div>
-          )}
+          </div>
+        </div>
 
-          {/* Moota Tab */}
-          {activeTab === 'moota' && (
-            <div className="space-y-6">
-              {/* Info */}
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start">
-                  <svg className="w-5 h-5 text-green-500 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-medium text-green-800">Metode Moota Transfer Otomatis</p>
-                    <p className="text-sm text-green-600 mt-1">
-                      Pelanggan transfer ke rekening bank Anda dengan kode unik. 
-                      Verifikasi <strong>otomatis</strong> melalui Moota.
-                    </p>
-                  </div>
-                </div>
-              </div>
+        {/* Upload Section */}
+        <div className="mb-6">
+          <h3 className="text-md font-semibold text-gray-900 mb-4">Upload QRIS Baru</h3>
+          <QRISUploader onQrDecode={handleQrDecode} />
 
-              {/* Alert Messages */}
-              {mootaError && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <p className="text-red-700 flex items-center">
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                    {mootaError}
-                  </p>
-                </div>
-              )}
-              
-              {mootaSuccess && (
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-700 flex items-center">
-                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    {mootaSuccess}
-                  </p>
-                </div>
-              )}
-
-              {/* Moota Form */}
-              <form onSubmit={handleMootaSubmit} className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {isEditingMoota ? 'Edit Konfigurasi' : 'Tambah Rekening Baru'}
-                  </h3>
-                  {isEditingMoota && (
-                    <button
-                      type="button"
-                      onClick={resetMootaForm}
-                      className="text-gray-600 hover:text-gray-800 text-sm"
-                    >
-                      Batal
-                    </button>
-                  )}
-                </div>
-
-                {/* Moota API Connection */}
+          {/* Manual Save Preview Area */}
+          {scannedQR && (
+            <div className="mt-4 p-4 border rounded-lg bg-purple-50 border-purple-200 animate-in fade-in slide-in-from-top-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Koneksi Moota API
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 px-4 py-3 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                        </svg>
-                        <span className="text-sm font-medium text-green-800">API Key Terkonfigurasi</span>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={testMootaConnection}
-                      disabled={isTestingConnection}
-                      className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center"
-                    >
-                      {isTestingConnection ? (
-                        <>
-                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          Menghubungkan...
-                        </>
-                      ) : (
-                        <>
-                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          Hubungkan ke Moota
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  <p className="text-sm text-purple-600 font-bold uppercase tracking-wide">QRIS Terdeteksi</p>
+                  <h4 className="text-lg font-bold text-gray-900 mt-1">{scannedQR.merchant}</h4>
+                  <p className="text-xs text-gray-500 font-mono mt-1 break-all line-clamp-1">{scannedQR.raw}</p>
                 </div>
-
-                {/* Bank Selection */}
-                {bankAccounts.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Pilih Rekening Bank <span className="text-red-500">*</span>
-                    </label>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {bankAccounts.map((bank) => (
-                        <div
-                          key={bank.bank_id}
-                          onClick={() => handleBankSelect(bank.bank_id)}
-                          className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                            mootaForm.bankAccountId === bank.bank_id
-                              ? 'border-green-500 bg-green-50'
-                              : 'border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-3 h-3 rounded-full ${
-                              mootaForm.bankAccountId === bank.bank_id ? 'bg-green-500' : 'bg-gray-300'
-                            }`} />
-                            <div>
-                              <p className="font-medium text-gray-900">{bank.bank_type}</p>
-                              <p className="text-sm text-gray-600">{bank.account_number}</p>
-                              <p className="text-xs text-gray-500">{bank.atas_nama}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Unique Code Range */}
-                {mootaForm.bankAccountId && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Range Kode Unik
-                    </label>
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="number"
-                        name="uniqueCodeStart"
-                        value={mootaForm.uniqueCodeStart}
-                        onChange={handleMootaInputChange}
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        min="1"
-                        max="999"
-                      />
-                      <span className="text-gray-500">sampai</span>
-                      <input
-                        type="number"
-                        name="uniqueCodeEnd"
-                        value={mootaForm.uniqueCodeEnd}
-                        onChange={handleMootaInputChange}
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                        min="1"
-                        max="999"
-                      />
-                    </div>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Kode unik 3 digit akan ditambahkan ke nominal transfer (contoh: Rp 50.000 + 123 = Rp 50.123)
-                    </p>
-                  </div>
-                )}
-
-                {/* Submit Button */}
-                {mootaForm.bankAccountId && (
-                  <button
-                    type="submit"
-                    disabled={mootaLoading}
-                    className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 font-medium"
-                  >
-                    {mootaLoading ? 'Menyimpan...' : isEditingMoota ? 'Perbarui Konfigurasi' : 'Simpan Konfigurasi'}
-                  </button>
-                )}
-              </form>
-
-              {/* Saved Moota Settings */}
-              {mootaSettings.length > 0 && (
-                <div className="border-t pt-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Rekening Tersimpan ({mootaSettings.length})
-                  </h3>
-                  <div className="space-y-3">
-                    {mootaSettings.map((setting) => (
-                      <div
-                        key={setting.id}
-                        className={`border rounded-lg p-4 ${
-                          setting.isActive ? 'border-green-500 bg-green-50' : 'border-gray-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-gray-900">
-                                {mootaService.getBankTypeName(setting.bankType)}
-                              </span>
-                              {setting.isActive && (
-                                <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded-full">
-                                  Aktif
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-600">{setting.accountNumber}</p>
-                            <p className="text-xs text-gray-500">{setting.bankAccountName}</p>
-                          </div>
-                          
-                          <div className="flex space-x-2">
-                            {!setting.isActive && (
-                              <button
-                                onClick={() => handleSetActiveMoota(setting.id!)}
-                                className="px-3 py-1 bg-green-100 text-green-700 text-sm font-medium rounded hover:bg-green-200"
-                              >
-                                Set Aktif
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleEditMoota(setting)}
-                              className="px-3 py-1 bg-gray-100 text-gray-700 text-sm font-medium rounded hover:bg-gray-200"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteMoota(setting.id!)}
-                              className="px-3 py-1 bg-red-100 text-red-700 text-sm font-medium rounded hover:bg-red-200"
-                            >
-                              Hapus
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                <button
+                  onClick={handleManualSaveQRIS}
+                  disabled={qrisLoading}
+                  className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm transition-all flex items-center gap-2"
+                >
+                  {qrisLoading ? 'Menyimpan...' : (
+                    <>
+                      <span className="material-symbols-outlined text-[18px]">save</span>
+                      Simpan QRIS
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           )}
+        </div>
+
+        {/* Saved QRIS List */}
+        <div className="border-t pt-6">
+          <h3 className="text-md font-semibold text-gray-900 mb-4">
+            QRIS Tersimpan ({qrisData.length})
+          </h3>
+
+          {qrisData.length === 0 ? (
+            <div className="text-center py-8 bg-gray-50 rounded-lg">
+              <svg className="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+              </svg>
+              <p className="text-gray-500">Belum ada QRIS tersimpan</p>
+              <p className="text-gray-400 text-sm">Upload QRIS pertama Anda di atas</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {qrisData.map((qris) => (
+                <div
+                  key={qris.id}
+                  className={`border rounded-lg p-4 ${qris.isDefault ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
+                    }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center">
+                        <h4 className="font-medium text-gray-900">{qris.merchantName}</h4>
+                        {qris.isDefault && (
+                          <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Ditambahkan: {formatDate(qris.createdAt)}
+                      </p>
+                    </div>
+
+                    <div className="flex space-x-2">
+                      {!qris.isDefault && (
+                        <button
+                          onClick={() => handleSetDefaultQRIS(qris.id!)}
+                          className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-medium rounded hover:bg-blue-200"
+                        >
+                          Set Default
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteQRIS(qris.id!)}
+                        className="px-3 py-1 bg-red-100 text-red-700 text-sm font-medium rounded hover:bg-red-200"
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Moota Info Card */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Status Moota</h2>
+            <p className="text-sm text-gray-600">Integrasi pembayaran transfer otomatis</p>
+          </div>
+        </div>
+
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="flex items-start">
+            <svg className="w-5 h-5 text-green-500 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-green-800">Moota Sudah Dikonfigurasi</p>
+              <p className="text-sm text-green-600 mt-1">
+                Pembayaran via transfer bank dengan verifikasi otomatis sudah aktif.
+                Pelanggan akan menerima kode unik untuk setiap transaksi.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

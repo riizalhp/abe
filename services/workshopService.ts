@@ -154,7 +154,7 @@ export async function createWorkshop(
   try {
     // Generate slug if not provided
     let slug = input.slug || generateSlug(input.name);
-    
+
     // Check if slug already exists
     const { data: existing } = await supabase
       .from('workshops')
@@ -214,7 +214,7 @@ export async function updateWorkshop(
   updates: Partial<CreateWorkshopInput & { logoUrl?: string; isActive?: boolean; paymentMethod?: string }>
 ): Promise<{ success: boolean; error: string | null }> {
   const dbUpdates: Record<string, any> = {};
-  
+
   if (updates.name) dbUpdates.name = updates.name;
   if (updates.slug) {
     // Validate slug uniqueness before updating
@@ -449,7 +449,7 @@ export async function getCurrentWorkshop(): Promise<Workshop | null> {
   if (workshopId) {
     return getWorkshopById(workshopId);
   }
-  
+
   // Otherwise, get from current authenticated user
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
@@ -482,6 +482,7 @@ export interface PublicWorkshopInfo {
   phone?: string;
   logoUrl?: string;
   description?: string;
+  bookingFee: number;
 }
 
 export async function getPublicWorkshopInfo(slug: string): Promise<PublicWorkshopInfo | null> {
@@ -496,6 +497,7 @@ export async function getPublicWorkshopInfo(slug: string): Promise<PublicWorksho
     phone: workshop.phone,
     logoUrl: workshop.logoUrl,
     description: workshop.description,
+    bookingFee: workshop.settings?.booking_fee || 25000,
   };
 }
 
@@ -504,37 +506,35 @@ export async function getPublicWorkshopInfo(slug: string): Promise<PublicWorksho
 // ============================================
 
 export async function getWorkshopMootaSettings(workshopId: string, branchId?: string) {
-  // First try to find branch-specific settings
-  if (branchId) {
-    const { data: branchData, error: branchError } = await supabase
-      .from('moota_settings')
-      .select('*')
-      .eq('workshop_id', workshopId)
-      .eq('branch_id', branchId)
-      .eq('is_active', true)
-      .maybeSingle();
+  // Moota is now centrally configured - always return hardcoded settings
+  // No need to check database anymore
+  try {
+    const mootaService = (await import('./mootaService')).default;
+    const hardcodedSettings = await mootaService.getHardcodedSettings();
 
-    if (!branchError && branchData) {
-      console.log('[getWorkshopMootaSettings] Found branch-specific settings:', branchData);
-      return branchData;
+    if (hardcodedSettings) {
+      console.log('[getWorkshopMootaSettings] Using hardcoded Moota settings');
+      return {
+        id: 'hardcoded',
+        workshop_id: workshopId,
+        branch_id: branchId || null,
+        access_token: hardcodedSettings.accessToken,
+        bank_account_id: hardcodedSettings.bankAccountId,
+        bank_account_name: hardcodedSettings.bankAccountName,
+        account_number: hardcodedSettings.accountNumber,
+        bank_type: hardcodedSettings.bankType,
+        unique_code_start: hardcodedSettings.uniqueCodeStart,
+        unique_code_end: hardcodedSettings.uniqueCodeEnd,
+        is_active: true
+      };
     }
-  }
 
-  // Fallback to workshop-level settings (branch_id is null or not set)
-  const { data, error } = await supabase
-    .from('moota_settings')
-    .select('*')
-    .eq('workshop_id', workshopId)
-    .eq('is_active', true)
-    .maybeSingle();
-
-  if (error || !data) {
-    console.log('[getWorkshopMootaSettings] No moota settings found for workshop:', workshopId);
+    console.log('[getWorkshopMootaSettings] No hardcoded Moota settings available');
+    return null;
+  } catch (error) {
+    console.error('[getWorkshopMootaSettings] Error getting hardcoded settings:', error);
     return null;
   }
-
-  console.log('[getWorkshopMootaSettings] Found workshop-level settings:', data);
-  return data;
 }
 
 // ============================================
@@ -587,17 +587,13 @@ export interface WorkshopTimeSlot {
 }
 
 export async function getWorkshopTimeSlots(workshopId: string, branchId?: string): Promise<WorkshopTimeSlot[]> {
-  let query = supabase
+  // Note: branch_id column may not exist in time_slots table yet
+  // So we just filter by workshop_id for now
+  const { data, error } = await supabase
     .from('time_slots')
     .select('*')
     .eq('workshop_id', workshopId)
-    .eq('is_active', true);
-
-  if (branchId) {
-    query = query.eq('branch_id', branchId);
-  }
-
-  const { data, error } = await query
+    .eq('is_active', true)
     .order('day_of_week')
     .order('start_time');
 
@@ -649,7 +645,7 @@ export async function createTimeSlot(
 // Get workshop settings (returns merged settings with defaults)
 export async function getWorkshopSettings(workshopId: string): Promise<Record<string, any>> {
   console.log('[getWorkshopSettings] Fetching settings for workshop:', workshopId);
-  
+
   const { data, error } = await supabase
     .from('workshops')
     .select('settings')
@@ -668,7 +664,7 @@ export async function getWorkshopSettings(workshopId: string): Promise<Record<st
     booking_fee: 25000,
     ...data.settings,
   };
-  
+
   console.log('[getWorkshopSettings] Merged settings:', result);
   return result;
 }
@@ -679,56 +675,172 @@ export async function updateWorkshopSettings(
   updates: Record<string, any>
 ): Promise<{ success: boolean; error: string | null }> {
   console.log('[updateWorkshopSettings] Updating settings for workshop:', workshopId, 'with:', updates);
-  
+
   try {
     // First get current settings
-    const { data: currentData } = await supabase
+    const { data: currentData, error: fetchError } = await supabase
       .from('workshops')
       .select('settings')
       .eq('id', workshopId)
       .single();
 
+    if (fetchError) {
+      console.error('[updateWorkshopSettings] Error fetching current settings:', fetchError);
+      return { success: false, error: 'Gagal mengambil pengaturan saat ini' };
+    }
+
     const currentSettings = currentData?.settings || {};
-    
+
     // Merge with updates
     const newSettings = {
       ...currentSettings,
       ...updates,
     };
 
+    console.log('[updateWorkshopSettings] New settings payload:', newSettings);
+
     // Update in database
-    const { error } = await supabase
+    const { error: updateError } = await supabase
       .from('workshops')
       .update({ settings: newSettings })
       .eq('id', workshopId);
 
-    if (error) {
-      console.error('Error updating workshop settings:', error);
-      return { success: false, error: error.message };
+    if (updateError) {
+      console.error('[updateWorkshopSettings] Error updating workshop settings:', updateError);
+      return { success: false, error: updateError.message };
     }
 
     return { success: true, error: null };
-  } catch (err) {
-    console.error('Error in updateWorkshopSettings:', err);
-    return { success: false, error: 'Failed to update settings' };
+  } catch (err: any) {
+    console.error('[updateWorkshopSettings] Exception:', err);
+    return { success: false, error: err.message || 'Failed to update settings' };
   }
 }
 
-// Get booking fee for a workshop
-export async function getBookingFee(workshopId: string): Promise<number> {
-  console.log('[getBookingFee] Getting booking fee for workshop:', workshopId);
+// Get booking fee for a workshop or specific branch
+export async function getBookingFee(workshopId: string, branchId?: string | null): Promise<number> {
+  console.log('[getBookingFee] Getting booking fee for workshop:', workshopId, 'branch:', branchId);
+
+  // If branchId provided, try generic branch settings first
+  if (branchId) {
+    const { data: branchData, error } = await supabase
+      .from('branches')
+      .select('settings')
+      .eq('id', branchId)
+      .single();
+
+    console.log('[getBookingFee] Raw branch data from DB:', branchData);
+
+    let settings = branchData?.settings;
+
+    // Robust parsing: Handle if settings is a string (common Supabase gotcha)
+    if (typeof settings === 'string') {
+      try {
+        settings = JSON.parse(settings);
+        console.log('[getBookingFee] Parsed string settings:', settings);
+      } catch (e) {
+        console.error('[getBookingFee] Failed to parse settings string:', e);
+        settings = {};
+      }
+    }
+
+    // Ensure settings is an object
+    settings = settings || {};
+
+    console.log('[getBookingFee] Final settings object:', settings);
+
+    // Check if booking_fee exists (can be 0, so check undefined)
+    if (settings.booking_fee !== undefined && settings.booking_fee !== null) {
+      const fee = Number(settings.booking_fee);
+      console.log('[getBookingFee] Returning branch-specific fee:', fee);
+      return fee;
+    } else {
+      console.log('[getBookingFee] Branch settings found but booking_fee missing/null. Falling back to global.');
+    }
+  }
+
+  // Fallback to workshop global settings
   const settings = await getWorkshopSettings(workshopId);
   const fee = settings.booking_fee || 25000;
-  console.log('[getBookingFee] Returning booking fee:', fee);
+  console.log('[getBookingFee] Returning global workshop fee:', fee);
   return fee;
 }
 
-// Update booking fee for a workshop
+// Update booking fee for a workshop or branch
 export async function updateBookingFee(
   workshopId: string,
-  amount: number
+  amount: number,
+  branchId?: string | null
 ): Promise<{ success: boolean; error: string | null }> {
-  return updateWorkshopSettings(workshopId, { booking_fee: amount });
+  console.log('[updateBookingFee] Updating fee to', amount, 'for workshop:', workshopId, 'branch:', branchId);
+
+  try {
+    if (branchId) {
+      // Update branch settings
+      const { data: currentBranch } = await supabase
+        .from('branches')
+        .select('settings')
+        .eq('id', branchId)
+        .single();
+
+      let currentSettings = currentBranch?.settings;
+
+      // Robust parsing
+      if (typeof currentSettings === 'string') {
+        try {
+          currentSettings = JSON.parse(currentSettings);
+        } catch (e) {
+          currentSettings = {};
+        }
+      }
+
+      currentSettings = currentSettings || {};
+
+      const newSettings = { ...currentSettings, booking_fee: amount };
+      console.log('[updateBookingFee] Saving new settings for branch:', newSettings);
+
+      // Get User ID from localStorage (Custom Auth Compatibility)
+      const savedUser = localStorage.getItem('currentUser');
+      let userId: string | undefined;
+      if (savedUser) {
+        try {
+          const u = JSON.parse(savedUser);
+          userId = u.id;
+        } catch (e) { }
+      }
+
+      if (userId) {
+        // Use RPC with explicit user_id to bypass RLS
+        const { data: updateResult, error } = await supabase.rpc('update_branch_settings', {
+          p_branch_id: branchId,
+          p_settings: newSettings,
+          p_user_id: userId
+        });
+
+        console.log('[updateBookingFee] RPC Result:', updateResult, 'Error:', error);
+
+        if (error) {
+          console.error('[updateBookingFee] RPC failed:', error);
+          throw error;
+        }
+      } else {
+        console.warn('[updateBookingFee] No user ID found locally. Direct update fallback.');
+        const { error } = await supabase
+          .from('branches')
+          .update({ settings: newSettings })
+          .eq('id', branchId);
+        if (error) throw error;
+      }
+
+      return { success: true, error: null };
+    } else {
+      // Update global workshop settings
+      return updateWorkshopSettings(workshopId, { booking_fee: amount });
+    }
+  } catch (error: any) {
+    console.error('Error updating booking fee:', error);
+    return { success: false, error: error.message };
+  }
 }
 
 // ============================================

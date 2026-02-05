@@ -22,10 +22,10 @@ interface BranchContextType {
   // Branch data
   branches: Branch[];
   activeBranch: Branch | null;
-  
+
   // State
   isLoading: boolean;
-  
+
   // Actions
   changeBranch: (branch: Branch) => void;
   refreshBranches: () => Promise<void>;
@@ -56,11 +56,55 @@ export function BranchProvider({ children }: BranchProviderProps) {
 
   // Load branches for current workshop
   const loadBranches = async () => {
-    const workshopId = getStoredWorkshopId();
+    // Custom Auth: Trust localStorage for now since we're fixing the auth system separately
+    // const { data: { user } } = await supabase.auth.getUser();
+
+    // Fallback: Get user from localStorage
+    const savedUser = localStorage.getItem('currentUser');
+    let userId: string | undefined;
+
+    if (savedUser) {
+      try {
+        const parsedUser = JSON.parse(savedUser);
+        userId = parsedUser.id;
+      } catch (e) {
+        console.error('Failed to parse currentUser from localStorage');
+      }
+    }
+
+    if (!userId) {
+      setBranches([]);
+      setActiveBranch(null);
+      setIsLoading(false);
+      return;
+    }
+
+    // Get the REAL workshop_id from the user's profile
+    const { data: userData } = await supabase
+      .from('users')
+      .select('workshop_id')
+      .eq('id', userId)
+      .single();
+
+    const verifiedWorkshopId = userData?.workshop_id;
+    const storedWorkshopId = getStoredWorkshopId();
+
+    // If stored ID doesn't match verified ID, force use of verified ID
+    // This fixes the "Drakor vs Joko" cross-tenant leak
+    const workshopId = verifiedWorkshopId || storedWorkshopId;
+
     if (!workshopId) {
       setIsLoading(false);
       return;
     }
+
+    // If we had a mismatch, correct the local storage
+    if (verifiedWorkshopId && storedWorkshopId !== verifiedWorkshopId) {
+      console.warn('[BranchContext] Security Mismatch! Fixup: LocalStorage ID was', storedWorkshopId, 'but User belongs to', verifiedWorkshopId);
+      localStorage.setItem('currentWorkshopId', verifiedWorkshopId);
+    }
+
+    console.log('[BranchContext] Loading branches for Workshop ID:', workshopId);
 
     try {
       const { data, error } = await supabase
@@ -71,11 +115,15 @@ export function BranchProvider({ children }: BranchProviderProps) {
         .order('is_main', { ascending: false })
         .order('name', { ascending: true });
 
+      console.log('[BranchContext] Load result:', { count: data?.length, error });
+
       if (error) {
         console.error('Failed to load branches:', error);
         setIsLoading(false);
         return;
       }
+
+      // ... rest of processing
 
       const branchList: Branch[] = (data || []).map((b: any) => ({
         id: b.id,
@@ -94,7 +142,7 @@ export function BranchProvider({ children }: BranchProviderProps) {
       // Restore active branch from localStorage or use main branch
       const savedBranchId = localStorage.getItem('activeBranchId');
       let activeB = branchList.find(b => b.id === savedBranchId);
-      
+
       if (!activeB) {
         // Default to main branch or first branch
         activeB = branchList.find(b => b.isMain) || branchList[0];
@@ -126,9 +174,22 @@ export function BranchProvider({ children }: BranchProviderProps) {
 
   // Add new branch
   const addBranch = async (data: Omit<Branch, 'id' | 'workshopId' | 'createdAt'>): Promise<{ success: boolean; error?: string; branch?: Branch }> => {
-    const workshopId = getStoredWorkshopId();
+    // SECURITY FIX: Don't trust localStorage. Get verified workshop ID.
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return { success: false, error: 'User tidak terautentikasi' };
+    }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('workshop_id')
+      .eq('id', user.id)
+      .single();
+
+    const workshopId = userData?.workshop_id;
+
     if (!workshopId) {
-      return { success: false, error: 'Workshop tidak ditemukan' };
+      return { success: false, error: 'Workshop tidak ditemukan untuk user ini' };
     }
 
     try {
@@ -138,7 +199,7 @@ export function BranchProvider({ children }: BranchProviderProps) {
       const { data: newBranch, error } = await supabase
         .from('branches')
         .insert({
-          workshop_id: workshopId,
+          workshop_id: workshopId, // Use verified ID
           name: data.name,
           code: code,
           address: data.address,

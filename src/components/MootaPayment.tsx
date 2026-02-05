@@ -65,13 +65,13 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
   const [copied, setCopied] = useState<'amount' | 'account' | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [lastPollTime, setLastPollTime] = useState<string>('');
-  
+
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize payment
   useEffect(() => {
     initializePayment();
-    
+
     return () => {
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
@@ -132,7 +132,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
 
       // Check if order already exists
       let order = await mootaService.getPaymentOrder(orderId);
-      
+
       if (!order) {
         // Create new payment order
         order = await mootaService.createPaymentOrder(
@@ -172,20 +172,20 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
       console.log('[MootaPayment] Updating order status to CHECKING...');
       const updateResult = await mootaService.updatePaymentOrderStatus(paymentOrder.orderId, 'CHECKING');
       console.log('[MootaPayment] Order status update result:', updateResult);
-      
+
       // Verify the update by fetching the order again
       const verifyOrder = await mootaService.getPaymentOrder(paymentOrder.orderId);
       console.log('[MootaPayment] Verified order status:', verifyOrder?.status);
-      
+
       setHasConfirmed(true);
-      
+
       // Update local state with verified order
       const updatedOrder = verifyOrder || {
         ...paymentOrder,
         status: 'CHECKING' as const
       };
       setPaymentOrder(updatedOrder);
-      
+
       // PENTING: Panggil onPaymentComplete untuk menyimpan booking
       // Ini akan membuat booking tersimpan di database dengan status PENDING
       console.log('[MootaPayment] Calling onPaymentComplete...');
@@ -195,7 +195,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
       } else {
         console.warn('[MootaPayment] onPaymentComplete is not defined!');
       }
-      
+
     } catch (err) {
       console.error('[MootaPayment] Failed to update order status:', err);
       // Still mark as confirmed locally even if update fails
@@ -206,36 +206,36 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
       }
     }
   };
-  
+
   // Poll untuk cek jika admin sudah verifikasi atau webhook sudah update
   useEffect(() => {
     if (!hasConfirmed || !paymentOrder?.orderId) {
       console.log('[MootaPayment] Polling skipped - hasConfirmed:', hasConfirmed, 'orderId:', paymentOrder?.orderId);
       return;
     }
-    
+
     console.log('[MootaPayment] Starting polling for payment verification. Order ID:', paymentOrder.orderId);
     setIsPolling(true);
-    
+
     // Immediately check once
     const checkStatus = async () => {
       try {
         const now = new Date().toLocaleTimeString('id-ID');
         setLastPollTime(now);
         console.log('[MootaPayment] Checking payment status at', now, 'for:', paymentOrder.orderId);
-        
+
         const updatedOrder = await mootaService.getPaymentOrder(paymentOrder.orderId);
         console.log('[MootaPayment] Payment order status:', updatedOrder?.status);
-        
+
         if (updatedOrder?.status === 'PAID') {
           console.log('[MootaPayment] Payment verified! Calling onPaymentVerified...');
           console.log('[MootaPayment] onPaymentVerified callback exists?', !!onPaymentVerified);
           setPaymentOrder(updatedOrder);
           setIsPolling(false);
-          
+
           // Tampilkan sukses
           alert('🎉 Pembayaran berhasil diverifikasi! Silakan lanjutkan mengisi keluhan.');
-          
+
           // Panggil callback untuk lanjut ke step berikutnya (step 3 - input keluhan)
           if (onPaymentVerified) {
             console.log('[MootaPayment] Calling onPaymentVerified callback now...');
@@ -246,17 +246,17 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
           }
           return true; // Payment verified
         }
-        
+
         return false; // Not yet verified
       } catch (err) {
         console.error('[MootaPayment] Poll error:', err);
         return false;
       }
     };
-    
+
     // Check immediately on mount
     checkStatus();
-    
+
     // Then poll every 5 seconds
     const pollInterval = setInterval(async () => {
       const verified = await checkStatus();
@@ -264,7 +264,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
         clearInterval(pollInterval);
       }
     }, 5000);
-    
+
     return () => {
       console.log('[MootaPayment] Stopping polling');
       setIsPolling(false);
@@ -351,7 +351,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
             Terima kasih! Pembayaran Anda sedang diverifikasi oleh kasir.
             <br />Halaman ini akan otomatis berubah setelah diverifikasi.
           </p>
-          
+
           {/* Polling Status Indicator */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
             <div className="flex items-center justify-center gap-2">
@@ -370,7 +370,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
               )}
             </div>
           </div>
-          
+
           <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left">
             <div className="text-sm space-y-2">
               <div className="flex justify-between">
@@ -418,13 +418,12 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
             </button>
           )}
         </div>
-        
+
         {/* Timer */}
         <div className="flex items-center justify-between bg-white/10 rounded-lg p-3">
           <span className="text-sm">Sisa waktu:</span>
-          <span className={`font-mono font-bold text-lg ${
-            timeRemaining === 'Expired' ? 'text-red-300' : ''
-          }`}>
+          <span className={`font-mono font-bold text-lg ${timeRemaining === 'Expired' ? 'text-red-300' : ''
+            }`}>
             {timeRemaining === 'Expired' ? 'Kadaluarsa' : timeRemaining}
           </span>
         </div>
@@ -480,7 +479,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
               {(() => {
                 const numericPart = (paymentOrder?.totalAmount || 0).toString();
                 const baseStr = 'Rp ';
-                
+
                 if (numericPart.length > 3) {
                   const mainPart = numericPart.slice(0, -3);
                   const highlightPart = numericPart.slice(-3);
@@ -517,7 +516,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
               )}
             </button>
           </div>
-          
+
           {/* Amount breakdown */}
           <div className="mt-3 pt-3 border-t border-blue-200 text-sm">
             <div className="flex justify-between text-gray-600">
@@ -529,7 +528,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
               <span className="text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded">+{paymentOrder?.uniqueCode}</span>
             </div>
           </div>
-          
+
           {/* Visual explanation */}
           <div className="mt-3 pt-3 border-t border-blue-200">
             <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -550,7 +549,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
             <div>
               <p className="text-sm text-yellow-700 font-medium">Penting!</p>
               <p className="text-sm text-yellow-600 mt-1">
-                Transfer dengan nominal <strong>PERSIS</strong> seperti di atas. 
+                Transfer dengan nominal <strong>PERSIS</strong> seperti di atas.
                 Pembayaran akan diverifikasi oleh kasir.
               </p>
             </div>

@@ -111,9 +111,10 @@ const mapToDbBooking = (booking: Partial<BookingRecord>): any => {
     if (booking.aiAnalysis) dbBooking.ai_analysis = booking.aiAnalysis;
     if (booking.status) dbBooking.status = booking.status;
     if (booking.mechanicId) dbBooking.mechanic_id = booking.mechanicId;
-    if (booking.paymentMethod) dbBooking.payment_method = booking.paymentMethod;
-    if (booking.transferProofBase64) dbBooking.transfer_proof_base64 = booking.transferProofBase64;
-    if (booking.paymentAmount) dbBooking.payment_amount = booking.paymentAmount;
+    // Columns that don't exist in bookings table - skip them:
+    // - payment_method (stored in payment_orders)
+    // - payment_amount (stored in payment_orders)
+    // - transfer_proof_base64 (not used with Moota)
     if (booking.workshopId) dbBooking.workshop_id = booking.workshopId;
     return dbBooking;
 }
