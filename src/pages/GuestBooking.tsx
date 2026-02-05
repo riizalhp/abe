@@ -737,13 +737,18 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                             <div className="text-sm text-yellow-800">
                                                 <p className="font-semibold mb-1">Metode Pembayaran Belum Dikonfigurasi</p>
                                                 <p>Metode pembayaran {activePaymentMethod === 'moota' ? 'Moota Transfer' : 'QRIS'} belum dikonfigurasi oleh bengkel.</p>
-                                                <p className="mt-2">Silakan hubungi bengkel untuk informasi pembayaran atau upload bukti pembayaran manual.</p>
+                                                {activePaymentMethod === 'moota' ? (
+                                                    <p className="mt-2">Silakan hubungi bengkel untuk informasi pembayaran.</p>
+                                                ) : (
+                                                    <p className="mt-2">Silakan hubungi bengkel untuk informasi pembayaran atau upload bukti pembayaran manual.</p>
+                                                )}
                                                 <p className="mt-2 font-bold text-lg">Total: Rp {paymentAmount.toLocaleString('id-ID')}</p>
                                             </div>
                                         </div>
                                     </div>
 
-                                    {/* Upload Payment Proof Section */}
+                                    {/* Upload Payment Proof Section - Only show for QRIS fallback */}
+                                    {activePaymentMethod === 'qris' && (
                                     <div className="border-t border-gray-200 pt-6">
                                         <div className="mb-4">
                                             <h4 className="text-lg font-semibold text-gray-900 mb-2">Upload Bukti Pembayaran</h4>
@@ -822,6 +827,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                             {paymentProof ? 'Lanjutkan' : 'Upload Bukti untuk Melanjutkan'}
                                         </button>
                                     </div>
+                                    )}
                                     
                                     <div className="flex justify-start pt-4">
                                         <button type="button" onClick={() => setStep(1)} className="px-6 py-2 text-gray-600 hover:text-gray-800">
