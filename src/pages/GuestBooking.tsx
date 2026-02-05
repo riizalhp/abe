@@ -52,20 +52,11 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const audioChunksRef = useRef<Blob[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Load active payment method and booking fee from localStorage
+    // Load active payment method from localStorage (payment method is per-session)
     useEffect(() => {
         const savedMethod = localStorage.getItem('active_payment_method');
         if (savedMethod === 'qris' || savedMethod === 'moota') {
             setActivePaymentMethod(savedMethod);
-        }
-        
-        // Load booking fee from localStorage
-        const savedBookingFee = localStorage.getItem('qris_default_amount');
-        if (savedBookingFee) {
-            const fee = parseInt(savedBookingFee, 10);
-            if (!isNaN(fee) && fee > 0) {
-                setPaymentAmount(fee);
-            }
         }
     }, []);
 
@@ -110,6 +101,10 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                             // Check QRIS config
                             const qrisData = await qrisService.getAllQRISData();
                             setQrisConfigured(qrisData.length > 0);
+                            
+                            // Load booking fee from workshop settings
+                            const bookingFee = await workshopService.getBookingFee(info.id);
+                            setPaymentAmount(bookingFee);
                         } else {
                             setWorkshopError('Cabang tidak ditemukan');
                         }
@@ -138,6 +133,10 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                         // Check QRIS config
                         const qrisData = await qrisService.getAllQRISData();
                         setQrisConfigured(qrisData.length > 0);
+                        
+                        // Load booking fee from workshop settings
+                        const bookingFee = await workshopService.getBookingFee(info.id);
+                        setPaymentAmount(bookingFee);
                     }
                 } else {
                     setWorkshopError('Workshop tidak ditemukan');
@@ -150,6 +149,13 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 setMootaConfigured(!!settings);
                 const qrisData = await qrisService.getAllQRISData();
                 setQrisConfigured(qrisData.length > 0);
+                
+                // Load booking fee from current workshop if available
+                const currentWorkshopId = workshopService.getCurrentWorkshopId();
+                if (currentWorkshopId) {
+                    const bookingFee = await workshopService.getBookingFee(currentWorkshopId);
+                    setPaymentAmount(bookingFee);
+                }
             }
             
             setWorkshopLoading(false);
@@ -556,7 +562,13 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                             <div className="text-center mb-6">
                                 <h3 className="text-2xl font-bold text-gray-900 mb-1">Pembayaran</h3>
                                 <p className="text-gray-600">{formData.vehicleModel} - Biaya Booking</p>
-                                <p className="text-lg font-bold text-primary mt-2">Rp {paymentAmount.toLocaleString('id-ID')}</p>
+                                {/* Only show base amount for QRIS, Moota will show its own total with unique code */}
+                                {activePaymentMethod === 'qris' && (
+                                    <p className="text-lg font-bold text-primary mt-2">Rp {paymentAmount.toLocaleString('id-ID')}</p>
+                                )}
+                                {activePaymentMethod === 'moota' && (
+                                    <p className="text-sm text-gray-500 mt-2">Lihat nominal transfer di bawah (termasuk kode unik)</p>
+                                )}
                             </div>
 
                             {/* Moota Transfer Payment - Active Method */}

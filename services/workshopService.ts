@@ -116,10 +116,14 @@ export async function getWorkshopBySlug(slug: string): Promise<Workshop | null> 
     .select('*')
     .eq('slug', slug)
     .eq('is_active', true)
-    .single();
+    .maybeSingle();
 
-  if (error || !data) {
+  if (error) {
     console.error('Error fetching workshop by slug:', error);
+    return null;
+  }
+
+  if (!data) {
     return null;
   }
 
@@ -625,6 +629,83 @@ export async function createTimeSlot(
 }
 
 // ============================================
+// Workshop Settings Management
+// ============================================
+
+// Get workshop settings (returns merged settings with defaults)
+export async function getWorkshopSettings(workshopId: string): Promise<Record<string, any>> {
+  const { data, error } = await supabase
+    .from('workshops')
+    .select('settings')
+    .eq('id', workshopId)
+    .single();
+
+  if (error || !data) {
+    console.error('Error fetching workshop settings:', error);
+    return { booking_fee: 25000 }; // Default values
+  }
+
+  // Return settings with default values for missing fields
+  return {
+    booking_fee: 25000,
+    ...data.settings,
+  };
+}
+
+// Update workshop settings (partial update)
+export async function updateWorkshopSettings(
+  workshopId: string,
+  updates: Record<string, any>
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    // First get current settings
+    const { data: currentData } = await supabase
+      .from('workshops')
+      .select('settings')
+      .eq('id', workshopId)
+      .single();
+
+    const currentSettings = currentData?.settings || {};
+    
+    // Merge with updates
+    const newSettings = {
+      ...currentSettings,
+      ...updates,
+    };
+
+    // Update in database
+    const { error } = await supabase
+      .from('workshops')
+      .update({ settings: newSettings })
+      .eq('id', workshopId);
+
+    if (error) {
+      console.error('Error updating workshop settings:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, error: null };
+  } catch (err) {
+    console.error('Error in updateWorkshopSettings:', err);
+    return { success: false, error: 'Failed to update settings' };
+  }
+}
+
+// Get booking fee for a workshop
+export async function getBookingFee(workshopId: string): Promise<number> {
+  const settings = await getWorkshopSettings(workshopId);
+  return settings.booking_fee || 25000;
+}
+
+// Update booking fee for a workshop
+export async function updateBookingFee(
+  workshopId: string,
+  amount: number
+): Promise<{ success: boolean; error: string | null }> {
+  return updateWorkshopSettings(workshopId, { booking_fee: amount });
+}
+
+// ============================================
 // Export default service object
 // ============================================
 
@@ -660,6 +741,12 @@ const workshopService = {
   // Time Slots
   getWorkshopTimeSlots,
   createTimeSlot,
+
+  // Settings
+  getWorkshopSettings,
+  updateWorkshopSettings,
+  getBookingFee,
+  updateBookingFee,
 };
 
 export default workshopService;

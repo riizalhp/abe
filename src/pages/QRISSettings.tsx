@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { QRISUploader } from '../components/QRISUploader';
 import qrisService, { QRISData } from '../../services/qrisService';
+import workshopService from '../../services/workshopService';
 
 export const QRISSettings: React.FC = () => {
   const [qrisData, setQrisData] = useState<QRISData[]>([]);
@@ -20,10 +21,16 @@ export const QRISSettings: React.FC = () => {
     }
   }, []);
 
-  const loadDefaultAmount = useCallback(() => {
-    const savedAmount = localStorage.getItem('qris_default_amount');
-    if (savedAmount) {
-      setDefaultAmount(parseInt(savedAmount, 10));
+  const loadDefaultAmount = useCallback(async () => {
+    try {
+      const workshopId = workshopService.getCurrentWorkshopId();
+      if (workshopId) {
+        const bookingFee = await workshopService.getBookingFee(workshopId);
+        setDefaultAmount(bookingFee);
+      }
+    } catch (error) {
+      console.error('Error loading booking fee:', error);
+      setDefaultAmount(25000);
     }
   }, []);
 
@@ -103,13 +110,17 @@ export const QRISSettings: React.FC = () => {
     }
   };
 
-  const handleAmountChange = (value: string) => {
+  const handleAmountChange = async (value: string) => {
     setAmountError(null);
 
     const numValue = parseInt(value.replace(/\D/g, ''), 10);
     if (isNaN(numValue)) {
-      setDefaultAmount(0); // Allow clearing the input field
-      localStorage.setItem('qris_default_amount', '0');
+      setDefaultAmount(0);
+      // Save to Supabase
+      const workshopId = workshopService.getCurrentWorkshopId();
+      if (workshopId) {
+        await workshopService.updateBookingFee(workshopId, 0);
+      }
       setUploadSuccess('Default amount cleared');
       return;
     }
@@ -120,8 +131,17 @@ export const QRISSettings: React.FC = () => {
     }
 
     setDefaultAmount(numValue);
-    localStorage.setItem('qris_default_amount', numValue.toString());
-    setUploadSuccess('Default amount updated successfully');
+    
+    // Save to Supabase
+    const workshopId = workshopService.getCurrentWorkshopId();
+    if (workshopId) {
+      const result = await workshopService.updateBookingFee(workshopId, numValue);
+      if (result.success) {
+        setUploadSuccess('Default amount updated successfully');
+      } else {
+        setAmountError('Failed to save amount');
+      }
+    }
 
     // Clear success message after 3 seconds
     setTimeout(() => setUploadSuccess(null), 3000);

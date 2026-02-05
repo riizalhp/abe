@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { QRISUploader } from '../components/QRISUploader';
 import qrisService, { QRISData } from '../../services/qrisService';
 import mootaService, { MootaSettings as MootaSettingsData, MootaBankAccount } from '../../services/mootaService';
+import workshopService from '../../services/workshopService';
 import { useBranch } from '../../lib/BranchContext';
 
 type PaymentTab = 'qris' | 'moota';
@@ -83,11 +84,17 @@ export const PaymentSettings: React.FC = () => {
     }
   }, []);
 
-  // Load default amount from localStorage
-  const loadDefaultAmount = useCallback(() => {
-    const savedAmount = localStorage.getItem('qris_default_amount');
-    if (savedAmount) {
-      setDefaultAmount(parseInt(savedAmount, 10));
+  // Load default amount from Supabase workshop settings
+  const loadDefaultAmount = useCallback(async () => {
+    try {
+      const workshopId = workshopService.getCurrentWorkshopId();
+      if (workshopId) {
+        const bookingFee = await workshopService.getBookingFee(workshopId);
+        setDefaultAmount(bookingFee);
+      }
+    } catch (error) {
+      console.error('Error loading booking fee:', error);
+      setDefaultAmount(25000); // Default fallback
     }
   }, []);
 
@@ -199,11 +206,15 @@ export const PaymentSettings: React.FC = () => {
     }
   };
 
-  const handleAmountChange = (value: string) => {
+  const handleAmountChange = async (value: string) => {
     const numValue = parseInt(value.replace(/\D/g, ''), 10);
     if (isNaN(numValue)) {
       setDefaultAmount(0);
-      localStorage.setItem('qris_default_amount', '0');
+      // Save to Supabase
+      const workshopId = workshopService.getCurrentWorkshopId();
+      if (workshopId) {
+        await workshopService.updateBookingFee(workshopId, 0);
+      }
       return;
     }
 
@@ -213,9 +224,19 @@ export const PaymentSettings: React.FC = () => {
     }
 
     setDefaultAmount(numValue);
-    localStorage.setItem('qris_default_amount', numValue.toString());
-    setQrisSuccess('Nominal default berhasil diperbarui');
-    setTimeout(() => setQrisSuccess(null), 3000);
+    
+    // Save to Supabase
+    const workshopId = workshopService.getCurrentWorkshopId();
+    if (workshopId) {
+      const result = await workshopService.updateBookingFee(workshopId, numValue);
+      if (result.success) {
+        setQrisSuccess('Nominal default berhasil diperbarui');
+        setTimeout(() => setQrisSuccess(null), 3000);
+      } else {
+        setQrisError('Gagal menyimpan nominal');
+        setTimeout(() => setQrisError(null), 3000);
+      }
+    }
   };
 
   // Moota Handlers
@@ -521,6 +542,41 @@ export const PaymentSettings: React.FC = () => {
         </div>
       </div>
 
+      {/* Default Booking Fee - Applies to both QRIS and Moota */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+            <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-semibold text-gray-900">Nominal Biaya Booking</h2>
+            <p className="text-sm text-gray-600">
+              Nominal ini digunakan untuk <strong>QRIS</strong> maupun <strong>Moota Transfer</strong>
+            </p>
+          </div>
+        </div>
+        
+        <div className="max-w-md">
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <span className="text-gray-500 text-sm">Rp</span>
+            </div>
+            <input
+              type="text"
+              value={defaultAmount.toLocaleString('id-ID')}
+              onChange={(e) => handleAmountChange(e.target.value)}
+              className="block w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-lg font-semibold"
+              placeholder="50.000"
+            />
+          </div>
+          <p className="mt-2 text-sm text-gray-500">
+            Biaya booking saat ini: <span className="font-semibold text-purple-600">{formatCurrency(defaultAmount)}</span>
+          </p>
+        </div>
+      </div>
+
       {/* Payment Method Tabs */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden mb-6">
         <div className="border-b border-gray-200">
@@ -602,31 +658,6 @@ export const PaymentSettings: React.FC = () => {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Upload QRIS Baru</h3>
                 <QRISUploader onQrDecode={handleQrDecode} />
-              </div>
-
-              {/* Default Amount */}
-              <div className="border-t pt-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Nominal Biaya Booking</h3>
-                <div className="max-w-md">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Biaya Booking Default
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <span className="text-gray-500 text-sm">Rp</span>
-                    </div>
-                    <input
-                      type="text"
-                      value={defaultAmount.toLocaleString('id-ID')}
-                      onChange={(e) => handleAmountChange(e.target.value)}
-                      className="block w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="50.000"
-                    />
-                  </div>
-                  <p className="mt-2 text-sm text-gray-500">
-                    Saat ini: <span className="font-medium text-gray-900">{formatCurrency(defaultAmount)}</span>
-                  </p>
-                </div>
               </div>
 
               {/* Saved QRIS List */}
