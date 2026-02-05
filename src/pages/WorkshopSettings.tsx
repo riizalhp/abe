@@ -2,10 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import workshopService, { 
   getWorkshopById, 
   getWorkshopStaff, 
-  createStaffInvitation, 
-  getWorkshopInvitations,
   removeStaffFromWorkshop,
-  updateWorkshop
+  updateWorkshop,
+  getWorkshopBySlug
 } from '../../services/workshopService';
 import { Workshop, User, Role } from '../../types';
 import { useBranch } from '../../lib/BranchContext';
@@ -18,22 +17,21 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
   const { activeBranch } = useBranch();
   const [workshop, setWorkshop] = useState<Workshop | null>(null);
   const [staff, setStaff] = useState<User[]>([]);
-  const [invitations, setInvitations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'general' | 'staff' | 'invitations'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'staff'>('general');
   
   // Form states
   const [workshopName, setWorkshopName] = useState('');
+  const [workshopSlug, setWorkshopSlug] = useState('');
   const [workshopAddress, setWorkshopAddress] = useState('');
   const [workshopPhone, setWorkshopPhone] = useState('');
   const [workshopEmail, setWorkshopEmail] = useState('');
   const [workshopDescription, setWorkshopDescription] = useState('');
   
-  // Invitation form
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<Role>(Role.MEKANIK);
-  const [isInviting, setIsInviting] = useState(false);
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  // Slug validation
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
   
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -43,23 +41,24 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     try {
       if (currentUser.workshopId) {
         const branchId = activeBranch?.id;
-        const [ws, staffList, invites] = await Promise.all([
+        const [ws, staffList] = await Promise.all([
           getWorkshopById(currentUser.workshopId),
-          getWorkshopStaff(currentUser.workshopId, branchId),
-          getWorkshopInvitations(currentUser.workshopId, branchId)
+          getWorkshopStaff(currentUser.workshopId, branchId)
         ]);
         
         if (ws) {
           setWorkshop(ws);
           setWorkshopName(ws.name);
+          setWorkshopSlug(ws.slug);
           setWorkshopAddress(ws.address || '');
           setWorkshopPhone(ws.phone || '');
           setWorkshopEmail(ws.email || '');
           setWorkshopDescription(ws.description || '');
+          setSlugAvailable(null);
+          setSlugError(null);
         }
         
         setStaff(staffList);
-        setInvitations(invites);
       }
     } catch (error) {
       console.error('Error loading workshop data:', error);
@@ -81,8 +80,79 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     return () => window.removeEventListener('branchChanged', handleBranchChange);
   }, [loadWorkshopData]);
 
+  // Validate slug format
+  const formatSlug = (value: string): string => {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
+  };
+
+  // Check if slug is available
+  const checkSlugAvailability = async (slug: string) => {
+    if (!workshop || slug === workshop.slug) {
+      setSlugAvailable(null);
+      setSlugError(null);
+      return;
+    }
+
+    if (slug.length < 3) {
+      setSlugError('Slug minimal 3 karakter');
+      setSlugAvailable(false);
+      return;
+    }
+
+    setIsCheckingSlug(true);
+    setSlugError(null);
+    
+    try {
+      const existingWorkshop = await getWorkshopBySlug(slug);
+      if (existingWorkshop && existingWorkshop.id !== workshop.id) {
+        setSlugError('Slug sudah digunakan oleh bengkel lain');
+        setSlugAvailable(false);
+      } else {
+        setSlugAvailable(true);
+        setSlugError(null);
+      }
+    } catch (error) {
+      setSlugError('Gagal memeriksa ketersediaan slug');
+      setSlugAvailable(false);
+    } finally {
+      setIsCheckingSlug(false);
+    }
+  };
+
+  // Debounced slug check
+  useEffect(() => {
+    if (!workshop) return;
+    if (workshopSlug === workshop.slug) {
+      setSlugAvailable(null);
+      setSlugError(null);
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      checkSlugAvailability(workshopSlug);
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [workshopSlug, workshop?.slug]);
+
+  const handleSlugChange = (value: string) => {
+    const formattedSlug = formatSlug(value);
+    setWorkshopSlug(formattedSlug);
+  };
+
   const handleSaveWorkshop = async () => {
     if (!workshop) return;
+    
+    // Validate slug before saving
+    if (workshopSlug !== workshop.slug && slugAvailable === false) {
+      setMessage({ type: 'error', text: slugError || 'Slug tidak tersedia' });
+      return;
+    }
     
     setIsSaving(true);
     setMessage(null);
@@ -90,9 +160,9 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     try {
       const result = await updateWorkshop(workshop.id, {
         name: workshopName,
+        slug: workshopSlug !== workshop.slug ? workshopSlug : undefined,
         address: workshopAddress,
         phone: workshopPhone,
-        email: workshopEmail,
         description: workshopDescription
       });
       
@@ -106,37 +176,6 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
       setMessage({ type: 'error', text: 'Terjadi kesalahan' });
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleInviteStaff = async () => {
-    if (!workshop || !inviteEmail) return;
-    
-    setIsInviting(true);
-    setMessage(null);
-    setInviteCode(null);
-    
-    try {
-      const result = await createStaffInvitation(
-        workshop.id,
-        inviteEmail,
-        inviteRole,
-        currentUser.id,
-        activeBranch?.id // Pass branch ID
-      );
-      
-      if (result.inviteCode) {
-        setInviteCode(result.inviteCode);
-        setInviteEmail('');
-        setMessage({ type: 'success', text: `Undangan berhasil dibuat untuk cabang ${activeBranch?.name || 'utama'}!` });
-        loadWorkshopData();
-      } else {
-        setMessage({ type: 'error', text: result.error || 'Gagal membuat undangan' });
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Terjadi kesalahan' });
-    } finally {
-      setIsInviting(false);
     }
   };
 
@@ -155,13 +194,6 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
     } catch (error) {
       setMessage({ type: 'error', text: 'Terjadi kesalahan' });
     }
-  };
-
-  const copyInviteLink = () => {
-    if (!workshop || !inviteCode) return;
-    const link = `${window.location.origin}/join/${inviteCode}`;
-    navigator.clipboard.writeText(link);
-    setMessage({ type: 'success', text: 'Link undangan disalin!' });
   };
 
   if (isLoading) {
@@ -247,8 +279,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
       <div className="flex gap-2 mb-6 border-b border-gray-200">
         {[
           { key: 'general', label: 'Informasi Umum', icon: 'storefront' },
-          { key: 'staff', label: 'Staff', icon: 'group' },
-          { key: 'invitations', label: 'Undangan', icon: 'mail' }
+          { key: 'staff', label: 'Staff', icon: 'group' }
         ].map(tab => (
           <button
             key={tab.key}
@@ -281,13 +312,39 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Slug URL</label>
-              <input
-                type="text"
-                value={workshop.slug}
-                disabled
-                className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">URL: /booking/{workshop.slug}</p>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={workshopSlug}
+                  onChange={(e) => handleSlugChange(e.target.value)}
+                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary pr-10 ${
+                    slugError ? 'border-red-300 bg-red-50' : slugAvailable === true ? 'border-green-300 bg-green-50' : 'border-gray-300'
+                  }`}
+                  placeholder="slug-bengkel-anda"
+                />
+                {isCheckingSlug && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                  </div>
+                )}
+                {!isCheckingSlug && slugAvailable === true && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <span className="material-symbols-outlined text-green-500">check_circle</span>
+                  </div>
+                )}
+                {!isCheckingSlug && slugError && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <span className="material-symbols-outlined text-red-500">error</span>
+                  </div>
+                )}
+              </div>
+              {slugError && (
+                <p className="text-xs text-red-500 mt-1">{slugError}</p>
+              )}
+              {slugAvailable === true && (
+                <p className="text-xs text-green-500 mt-1">Slug tersedia!</p>
+              )}
+              <p className="text-xs text-gray-500 mt-1">URL: /booking/{workshopSlug || workshop.slug}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Telepon</label>
@@ -300,14 +357,18 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email
+                <span className="ml-2 text-xs font-normal text-gray-400">(tidak dapat diubah)</span>
+              </label>
               <input
                 type="email"
                 value={workshopEmail}
-                onChange={(e) => setWorkshopEmail(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                disabled
+                className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
                 placeholder="email@bengkel.com"
               />
+              <p className="text-xs text-gray-500 mt-1">Email terkait dengan akun login dan tidak dapat diubah</p>
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-2">Alamat</label>
@@ -400,118 +461,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
         </div>
       )}
 
-      {/* Invitations Tab */}
-      {activeTab === 'invitations' && (
-        <div className="space-y-6">
-          {/* Invite Form */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Undang Staff Baru</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  placeholder="email@staff.com"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as Role)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                >
-                  <option value={Role.ADMIN}>Admin</option>
-                  <option value={Role.MEKANIK}>Mekanik</option>
-                  <option value={Role.KASIR}>Kasir</option>
-                </select>
-              </div>
-            </div>
-            
-            <button
-              onClick={handleInviteStaff}
-              disabled={isInviting || !inviteEmail}
-              className="mt-4 px-6 py-3 bg-primary text-white rounded-lg font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-2"
-            >
-              {isInviting ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Mengirim...
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined">send</span>
-                  Kirim Undangan
-                </>
-              )}
-            </button>
-            
-            {/* Invite Code Display */}
-            {inviteCode && (
-              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-800 mb-2">Kode undangan berhasil dibuat:</p>
-                <div className="flex items-center gap-3">
-                  <code className="flex-1 bg-white px-4 py-2 rounded border border-green-200 font-mono text-lg">
-                    {inviteCode}
-                  </code>
-                  <button
-                    onClick={copyInviteLink}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                  >
-                    <span className="material-symbols-outlined">content_copy</span>
-                  </button>
-                </div>
-                <p className="text-xs text-green-600 mt-2">
-                  Link: {window.location.origin}/join/{inviteCode}
-                </p>
-              </div>
-            )}
-          </div>
-          
-          {/* Pending Invitations */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <h3 className="font-semibold text-gray-900">Undangan Pending ({invitations.length})</h3>
-            </div>
-            
-            {invitations.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                <span className="material-symbols-outlined text-4xl mb-2">mail</span>
-                <p>Tidak ada undangan pending</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-200">
-                {invitations.map(invite => (
-                  <div key={invite.id} className="p-4 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">{invite.email}</p>
-                      <p className="text-sm text-gray-500">
-                        Role: {invite.role} • Kode: {invite.invite_code}
-                      </p>
-                      <p className="text-xs text-gray-400">
-                        Kadaluarsa: {new Date(invite.expires_at).toLocaleDateString('id-ID')}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/join/${invite.invite_code}`);
-                        setMessage({ type: 'success', text: 'Link disalin!' });
-                      }}
-                      className="text-primary hover:text-primary/80"
-                    >
-                      <span className="material-symbols-outlined">content_copy</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };

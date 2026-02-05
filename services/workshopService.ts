@@ -212,9 +212,16 @@ export async function updateWorkshop(
   const dbUpdates: Record<string, any> = {};
   
   if (updates.name) dbUpdates.name = updates.name;
+  if (updates.slug) {
+    // Validate slug uniqueness before updating
+    const existingWorkshop = await getWorkshopBySlug(updates.slug);
+    if (existingWorkshop && existingWorkshop.id !== workshopId) {
+      return { success: false, error: 'Slug sudah digunakan oleh bengkel lain' };
+    }
+    dbUpdates.slug = updates.slug;
+  }
   if (updates.address !== undefined) dbUpdates.address = updates.address;
   if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
-  if (updates.email !== undefined) dbUpdates.email = updates.email;
   if (updates.description !== undefined) dbUpdates.description = updates.description;
   if (updates.logoUrl !== undefined) dbUpdates.logo_url = updates.logoUrl;
   if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
