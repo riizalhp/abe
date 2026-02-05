@@ -222,8 +222,8 @@ class QRISService {
   }
 
   // Get default QRIS from Supabase
-  async getDefaultQRIS(): Promise<QRISData | null> {
-    const all = await this.getAllQRISData();
+  async getDefaultQRIS(branchId?: string): Promise<QRISData | null> {
+    const all = await this.getAllQRISData(branchId);
     return all.find(q => q.isDefault) || null;
   }
 

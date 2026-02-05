@@ -9,6 +9,7 @@ interface QRISPaymentProps {
   feeValue?: number;
   onPaymentComplete?: () => void;
   onCancel?: () => void;
+  branchId?: string;
 }
 
 export const QRISPayment: React.FC<QRISPaymentProps> = ({
@@ -17,7 +18,8 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
   feeType,
   feeValue,
   onPaymentComplete,
-  onCancel
+  onCancel,
+  branchId
 }) => {
   const qrCodeRef = useRef<HTMLDivElement>(null);
   const [qrisData, setQrisData] = useState<string | null>(null);
@@ -28,7 +30,7 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
 
   useEffect(() => {
     generateDynamicQRIS();
-  }, [amount, feeType, feeValue]);
+  }, [amount, feeType, feeValue, branchId]);
 
   useEffect(() => {
     if (qrisData && qrCodeRef.current) {
@@ -42,8 +44,8 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
 
     try {
       // Get default QRIS
-      const defaultQris = await qrisService.getDefaultQRIS();
-      
+      const defaultQris = await qrisService.getDefaultQRIS(branchId);
+
       if (!defaultQris) {
         throw new Error('No default QRIS found. Please configure QRIS in settings first.');
       }
@@ -152,7 +154,7 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
           </svg>
           <h3 className="text-lg font-medium text-red-900 mb-2">Payment Error</h3>
           <p className="text-red-700 mb-4">{error}</p>
-          
+
           <div className="space-x-3">
             <button
               onClick={generateDynamicQRIS}
@@ -160,7 +162,7 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
             >
               Retry
             </button>
-            
+
             {onCancel && (
               <button
                 onClick={onCancel}
@@ -190,23 +192,23 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
             <span className="text-gray-600">{description}</span>
             <span className="font-medium">{formatCurrency(amount)}</span>
           </div>
-          
+
           {feeValue && feeValue > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">
                 Fee ({feeType === 'Persentase' ? `${feeValue}%` : formatCurrency(feeValue)})
               </span>
               <span className="text-gray-500">
-                {feeType === 'Persentase' 
+                {feeType === 'Persentase'
                   ? formatCurrency(amount * feeValue / 100)
                   : formatCurrency(feeValue)
                 }
               </span>
             </div>
           )}
-          
+
           <hr className="border-gray-300" />
-          
+
           <div className="flex justify-between font-bold text-lg">
             <span>Total</span>
             <span className="text-blue-600">{formatCurrency(totalAmount)}</span>
@@ -216,7 +218,7 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
 
       {/* QR Code */}
       <div className="text-center mb-6">
-        <div 
+        <div
           ref={qrCodeRef}
           className="inline-block p-4 bg-white border-2 border-gray-200 rounded-lg"
         />
