@@ -5,6 +5,8 @@ import { analyzeBookingWithAudio } from '../../services/geminiService';
 import { QRISPayment } from '../components/QRISPayment';
 import qrisService from '../../services/qrisService';
 
+import { useBranch } from '../../lib/BranchContext';
+
 interface BookingsProps {
     bookings: BookingRecord[];
     setBookings: (bookings: BookingRecord[]) => void;
@@ -13,6 +15,7 @@ interface BookingsProps {
 }
 
 const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue, onRefresh }) => {
+    const { activeBranch } = useBranch();
     const [selectedBooking, setSelectedBooking] = useState<BookingRecord | null>(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [showPayment, setShowPayment] = useState(false);
@@ -89,6 +92,9 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
 
     const handleInitiatePayment = () => {
         // Get default payment amount from QRIS service
+        // Pass branch ID if available to get branch-specific defaults if implemented in qrisService later
+        // Currently qrisService uses getDefaultAmount from local storage or constant, usually.
+        // Assuming qrisService.getDefaultAmount() logic is simple integer retrieval.
         const defaultAmount = qrisService.getDefaultAmount();
         setPaymentAmount(defaultAmount);
         setShowPayment(true);
@@ -167,12 +173,11 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                         <div className="text-xs text-slate-500 dark:text-slate-400">{b.vehicleModel}</div>
                                     </td>
                                     <td className="p-4 md:p-5">
-                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                            b.status === BookingStatus.CONFIRMED ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                            b.status === BookingStatus.REJECTED ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                                            b.status === BookingStatus.CHECKED_IN ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                            'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                                        }`}>
+                                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${b.status === BookingStatus.CONFIRMED ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                                                b.status === BookingStatus.REJECTED ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                                    b.status === BookingStatus.CHECKED_IN ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                            }`}>
                                             {b.status === BookingStatus.CHECKED_IN ? 'COMPLETED' : b.status.replace('_', ' ')}
                                         </span>
                                     </td>
@@ -208,8 +213,8 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                         <p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{selectedBooking.bookingCode}</p>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={() => setSelectedBooking(null)} 
+                                <button
+                                    onClick={() => setSelectedBooking(null)}
                                     className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                                 >
                                     <span className="material-symbols-outlined">close</span>
@@ -239,7 +244,7 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 {/* Schedule & Actions */}
                                 <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                     <div>
@@ -251,20 +256,20 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                             <span className="font-medium">{selectedBooking.bookingTime}</span>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Action Buttons */}
                                     <div className="flex gap-2">
                                         {selectedBooking.status === BookingStatus.PENDING && (
                                             <>
-                                                <button 
-                                                    onClick={() => handleUpdateStatus(selectedBooking.id, BookingStatus.REJECTED)} 
+                                                <button
+                                                    onClick={() => handleUpdateStatus(selectedBooking.id, BookingStatus.REJECTED)}
                                                     className="px-3 py-2 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs font-semibold rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors flex items-center gap-1"
                                                 >
                                                     <span className="material-symbols-outlined text-sm">close</span>
                                                     Reject
                                                 </button>
-                                                <button 
-                                                    onClick={handleInitiatePayment} 
+                                                <button
+                                                    onClick={handleInitiatePayment}
                                                     className="px-4 py-2 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 shadow-sm transition-colors flex items-center gap-1"
                                                 >
                                                     <span className="material-symbols-outlined text-sm">payment</span>
@@ -273,8 +278,8 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                             </>
                                         )}
                                         {selectedBooking.status === BookingStatus.CONFIRMED && (
-                                            <button 
-                                                onClick={() => handleCheckIn(selectedBooking)} 
+                                            <button
+                                                onClick={() => handleCheckIn(selectedBooking)}
                                                 className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 shadow-sm transition-colors flex items-center gap-2"
                                             >
                                                 <span className="material-symbols-outlined text-base">login</span>
@@ -312,8 +317,8 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                         <div>
                                             <p className="text-sm text-slate-600 dark:text-slate-400">Amount</p>
                                             <p className="font-semibold text-lg text-slate-900 dark:text-white mt-1">
-                                                {selectedBooking.paymentAmount 
-                                                    ? `Rp ${selectedBooking.paymentAmount.toLocaleString('id-ID')}` 
+                                                {selectedBooking.paymentAmount
+                                                    ? `Rp ${selectedBooking.paymentAmount.toLocaleString('id-ID')}`
                                                     : 'Rp 25,000'}
                                             </p>
                                         </div>
@@ -321,7 +326,7 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                             <div className="md:col-span-2">
                                                 <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Payment Proof (WebP)</p>
                                                 <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
-                                                    <img 
+                                                    <img
                                                         src={`data:image/webp;base64,${selectedBooking.transferProofBase64}`}
                                                         alt="Payment proof"
                                                         className="w-full max-w-md mx-auto object-contain"
@@ -407,7 +412,7 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                         <div className="p-4 border-b border-border-light dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-lg font-bold text-slate-900 dark:text-white">Payment Confirmation</h3>
-                                <button 
+                                <button
                                     onClick={handlePaymentCancel}
                                     className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                                 >
@@ -424,6 +429,7 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                 description={`Booking Fee - ${selectedBooking.customerName}`}
                                 onPaymentComplete={handlePaymentComplete}
                                 onCancel={handlePaymentCancel}
+                                branchId={activeBranch?.id}
                             />
                         </div>
                     </div>
