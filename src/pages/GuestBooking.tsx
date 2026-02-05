@@ -772,6 +772,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                             orderId={bookingOrderId}
                                             onPaymentComplete={handlePaymentComplete}
                                             branchId={branchId || undefined}
+                                            showActionButtons={false}
                                         />
 
                                         {/* Upload Payment Proof Section */}

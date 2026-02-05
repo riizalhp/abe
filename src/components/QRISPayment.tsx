@@ -10,6 +10,7 @@ interface QRISPaymentProps {
   onPaymentComplete?: () => void;
   onCancel?: () => void;
   branchId?: string;
+  showActionButtons?: boolean;
 }
 
 export const QRISPayment: React.FC<QRISPaymentProps> = ({
@@ -19,7 +20,8 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
   feeValue,
   onPaymentComplete,
   onCancel,
-  branchId
+  branchId,
+  showActionButtons = true
 }) => {
   const qrCodeRef = useRef<HTMLDivElement>(null);
   const [qrisData, setQrisData] = useState<string | null>(null);
@@ -227,23 +229,27 @@ export const QRISPayment: React.FC<QRISPaymentProps> = ({
 
       {/* Action Buttons */}
       <div className="space-y-3">
-        <button
-          onClick={copyQRISData}
-          className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center"
-        >
-          <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          Copy QRIS Data
-        </button>
+        {showActionButtons && (
+          <>
+            <button
+              onClick={copyQRISData}
+              className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors flex items-center justify-center"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+              Copy QRIS Data
+            </button>
 
-        {onPaymentComplete && (
-          <button
-            onClick={onPaymentComplete}
-            className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-          >
-            Mark as Paid
-          </button>
+            {onPaymentComplete && (
+              <button
+                onClick={onPaymentComplete}
+                className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                Mark as Paid
+              </button>
+            )}
+          </>
         )}
 
         {onCancel && (
