@@ -24,11 +24,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     console.log('[Moota Webhook] Received request');
+    console.log('[Moota Webhook] Headers:', JSON.stringify(req.headers));
+    console.log('[Moota Webhook] Body:', JSON.stringify(req.body));
     
     // 1. Verify signature dari Moota
     const payload = JSON.stringify(req.body);
-    const signature = req.headers['signature'] as string;
+    const signature = req.headers['signature'] as string || req.headers['x-signature'] as string;
     const secretToken = process.env.MOOTA_SECRET_TOKEN;
+
+    console.log('[Moota Webhook] Signature from header:', signature);
+    console.log('[Moota Webhook] Secret token exists:', !!secretToken);
 
     if (!signature || !secretToken) {
       console.error('[Moota Webhook] Missing signature or secret');
@@ -39,9 +44,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     hmac.update(payload);
     const expectedSignature = hmac.digest('hex');
 
+    console.log('[Moota Webhook] Expected signature:', expectedSignature);
+    console.log('[Moota Webhook] Received signature:', signature);
+
     if (signature !== expectedSignature) {
       console.error('[Moota Webhook] Invalid signature');
-      return res.status(401).json({ error: 'Invalid signature' });
+      return res.status(401).json({ error: 'Invalid signature', expected: expectedSignature, received: signature });
     }
 
     console.log('[Moota Webhook] Signature verified');
