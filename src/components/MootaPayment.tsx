@@ -8,12 +8,43 @@ interface MootaPaymentProps {
   customerPhone: string;
   description?: string;
   onPaymentComplete?: (order: PaymentOrder) => void;
+  onPaymentVerified?: (order: PaymentOrder) => void; // Called when admin verifies payment
   onPaymentExpired?: () => void;
   onCancel?: () => void;
-  autoCheck?: boolean;
-  checkInterval?: number; // in seconds
 }
 
+/**
+ * MootaPayment Component - Supports Manual & Webhook Verification
+ * 
+ * === MANUAL MODE ===
+ * Alur:
+ * 1. Customer melihat nomor rekening + kode unik
+ * 2. Customer transfer via mobile banking
+ * 3. Customer klik "Saya Sudah Transfer" untuk konfirmasi
+ * 4. Admin cek mutasi di dashboard Moota (moota.co)
+ * 5. Admin klik "Verifikasi Transfer" di halaman admin
+ * Cost: 0 Poin (no API polling)
+ * 
+ * === WEBHOOK MODE (Supabase Edge Function) ===
+ * Alur:
+ * 1. Customer melihat nomor rekening + kode unik
+ * 2. Customer transfer via mobile banking
+ * 3. Customer klik "Saya Sudah Transfer" untuk konfirmasi
+ * 4. [AUTOMATIC] Moota detects mutation setiap 15 menit (0 Poin)
+ * 5. [AUTOMATIC] POST ke Supabase Edge Function
+ * 6. [AUTOMATIC] Payment auto-verified, status → PAID
+ * 7. Customer polling detect PAID dalam 5 detik
+ * 8. Customer auto-redirect ke step 3
+ * Cost: 0 Poin (webhook robot)
+ * 
+ * Webhook Endpoint: https://YOUR_PROJECT.supabase.co/functions/v1/moota-callback
+ * Setup: See SUPABASE_WEBHOOK_SETUP.md
+ * 
+ * Component supports BOTH modes seamlessly:
+ * - Manual verification via admin dashboard
+ * - Webhook auto-verification via Supabase Edge Function
+ * - Customer polling works for both
+ */
 export const MootaPayment: React.FC<MootaPaymentProps> = ({
   amount,
   orderId,
@@ -21,21 +52,20 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
   customerPhone,
   description,
   onPaymentComplete,
+  onPaymentVerified,
   onPaymentExpired,
   onCancel,
-  autoCheck = true,
-  checkInterval = 30 // Check every 30 seconds
 }) => {
   const [paymentOrder, setPaymentOrder] = useState<PaymentOrder | null>(null);
   const [settings, setSettings] = useState<MootaSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isPaid, setIsPaid] = useState(false);
+  const [hasConfirmed, setHasConfirmed] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [copied, setCopied] = useState<'amount' | 'account' | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [lastPollTime, setLastPollTime] = useState<string>('');
   
-  const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
   // Initialize payment
@@ -43,33 +73,15 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
     initializePayment();
     
     return () => {
-      if (checkIntervalRef.current) {
-        clearInterval(checkIntervalRef.current);
-      }
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
       }
     };
   }, [orderId, amount]);
 
-  // Auto-check payment status
-  useEffect(() => {
-    if (autoCheck && paymentOrder && !isPaid && paymentOrder.status === 'PENDING') {
-      checkIntervalRef.current = setInterval(() => {
-        checkPaymentStatus();
-      }, checkInterval * 1000);
-
-      return () => {
-        if (checkIntervalRef.current) {
-          clearInterval(checkIntervalRef.current);
-        }
-      };
-    }
-  }, [autoCheck, paymentOrder, isPaid, checkInterval]);
-
   // Countdown timer
   useEffect(() => {
-    if (paymentOrder?.expiresAt && !isPaid) {
+    if (paymentOrder?.expiresAt && !hasConfirmed) {
       updateCountdown();
       countdownRef.current = setInterval(updateCountdown, 1000);
 
@@ -79,7 +91,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
         }
       };
     }
-  }, [paymentOrder?.expiresAt, isPaid]);
+  }, [paymentOrder?.expiresAt, hasConfirmed]);
 
   const updateCountdown = useCallback(() => {
     if (!paymentOrder?.expiresAt) return;
@@ -134,9 +146,12 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
 
       setPaymentOrder(order);
 
-      if (order.status === 'PAID') {
-        setIsPaid(true);
-        onPaymentComplete?.(order);
+      // Check if already confirmed by customer
+      if (order.status === 'CHECKING' || order.status === 'PAID') {
+        setHasConfirmed(true);
+        if (order.status === 'PAID') {
+          onPaymentComplete?.(order);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to initialize payment');
@@ -145,27 +160,117 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
     }
   };
 
-  const checkPaymentStatus = async () => {
-    if (!paymentOrder || isPaid || isChecking) return;
+  // Customer confirms they have transferred
+  const handleConfirmTransfer = async () => {
+    if (!paymentOrder) return;
 
-    setIsChecking(true);
+    console.log('[MootaPayment] handleConfirmTransfer called');
+    console.log('[MootaPayment] Current paymentOrder:', paymentOrder);
+
     try {
-      const result = await mootaService.checkPaymentStatus(paymentOrder.orderId);
+      // Update order status to CHECKING (menunggu verifikasi admin)
+      console.log('[MootaPayment] Updating order status to CHECKING...');
+      const updateResult = await mootaService.updatePaymentOrderStatus(paymentOrder.orderId, 'CHECKING');
+      console.log('[MootaPayment] Order status update result:', updateResult);
       
-      if (result.isPaid) {
-        setIsPaid(true);
-        const updatedOrder = await mootaService.getPaymentOrder(paymentOrder.orderId);
-        if (updatedOrder) {
-          setPaymentOrder(updatedOrder);
-          onPaymentComplete?.(updatedOrder);
-        }
+      // Verify the update by fetching the order again
+      const verifyOrder = await mootaService.getPaymentOrder(paymentOrder.orderId);
+      console.log('[MootaPayment] Verified order status:', verifyOrder?.status);
+      
+      setHasConfirmed(true);
+      
+      // Update local state with verified order
+      const updatedOrder = verifyOrder || {
+        ...paymentOrder,
+        status: 'CHECKING' as const
+      };
+      setPaymentOrder(updatedOrder);
+      
+      // PENTING: Panggil onPaymentComplete untuk menyimpan booking
+      // Ini akan membuat booking tersimpan di database dengan status PENDING
+      console.log('[MootaPayment] Calling onPaymentComplete...');
+      if (onPaymentComplete) {
+        await onPaymentComplete(updatedOrder);
+        console.log('[MootaPayment] onPaymentComplete finished');
+      } else {
+        console.warn('[MootaPayment] onPaymentComplete is not defined!');
       }
+      
     } catch (err) {
-      console.error('Payment check error:', err);
-    } finally {
-      setIsChecking(false);
+      console.error('[MootaPayment] Failed to update order status:', err);
+      // Still mark as confirmed locally even if update fails
+      setHasConfirmed(true);
+      // Tetap panggil onPaymentComplete agar booking tersimpan
+      if (onPaymentComplete) {
+        await onPaymentComplete(paymentOrder);
+      }
     }
   };
+  
+  // Poll untuk cek jika admin sudah verifikasi atau webhook sudah update
+  useEffect(() => {
+    if (!hasConfirmed || !paymentOrder?.orderId) {
+      console.log('[MootaPayment] Polling skipped - hasConfirmed:', hasConfirmed, 'orderId:', paymentOrder?.orderId);
+      return;
+    }
+    
+    console.log('[MootaPayment] Starting polling for payment verification. Order ID:', paymentOrder.orderId);
+    setIsPolling(true);
+    
+    // Immediately check once
+    const checkStatus = async () => {
+      try {
+        const now = new Date().toLocaleTimeString('id-ID');
+        setLastPollTime(now);
+        console.log('[MootaPayment] Checking payment status at', now, 'for:', paymentOrder.orderId);
+        
+        const updatedOrder = await mootaService.getPaymentOrder(paymentOrder.orderId);
+        console.log('[MootaPayment] Payment order status:', updatedOrder?.status);
+        
+        if (updatedOrder?.status === 'PAID') {
+          console.log('[MootaPayment] Payment verified! Calling onPaymentVerified...');
+          console.log('[MootaPayment] onPaymentVerified callback exists?', !!onPaymentVerified);
+          setPaymentOrder(updatedOrder);
+          setIsPolling(false);
+          
+          // Tampilkan sukses
+          alert('🎉 Pembayaran berhasil diverifikasi! Silakan lanjutkan mengisi keluhan.');
+          
+          // Panggil callback untuk lanjut ke step berikutnya (step 3 - input keluhan)
+          if (onPaymentVerified) {
+            console.log('[MootaPayment] Calling onPaymentVerified callback now...');
+            onPaymentVerified(updatedOrder);
+            console.log('[MootaPayment] onPaymentVerified callback completed');
+          } else {
+            console.warn('[MootaPayment] onPaymentVerified callback is not defined!');
+          }
+          return true; // Payment verified
+        }
+        
+        return false; // Not yet verified
+      } catch (err) {
+        console.error('[MootaPayment] Poll error:', err);
+        return false;
+      }
+    };
+    
+    // Check immediately on mount
+    checkStatus();
+    
+    // Then poll every 5 seconds
+    const pollInterval = setInterval(async () => {
+      const verified = await checkStatus();
+      if (verified) {
+        clearInterval(pollInterval);
+      }
+    }, 5000);
+    
+    return () => {
+      console.log('[MootaPayment] Stopping polling');
+      setIsPolling(false);
+      clearInterval(pollInterval);
+    };
+  }, [hasConfirmed, paymentOrder?.orderId]);
 
   const copyToClipboard = async (text: string, type: 'amount' | 'account') => {
     try {
@@ -173,7 +278,6 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
       setCopied(type);
       setTimeout(() => setCopied(null), 2000);
     } catch (err) {
-      // Fallback
       const textArea = document.createElement('textarea');
       textArea.value = text;
       document.body.appendChild(textArea);
@@ -232,21 +336,68 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
     );
   }
 
-  if (isPaid) {
+  // Customer has confirmed transfer - waiting for admin verification
+  if (hasConfirmed) {
     return (
       <div className="p-6 bg-white rounded-lg shadow-md">
         <div className="text-center">
-          <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-12 h-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-12 h-12 text-yellow-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-          <h3 className="text-xl font-bold text-green-600 mb-2">Pembayaran Berhasil!</h3>
+          <h3 className="text-xl font-bold text-yellow-600 mb-2">Menunggu Verifikasi</h3>
           <p className="text-gray-600 mb-4">
-            Terima kasih! Pembayaran sebesar {formatCurrency(paymentOrder?.totalAmount || 0)} telah diterima.
+            Terima kasih! Pembayaran Anda sedang diverifikasi oleh kasir.
+            <br />Halaman ini akan otomatis berubah setelah diverifikasi.
           </p>
-          <div className="text-sm text-gray-500">
-            ID Order: {paymentOrder?.orderId}
+          
+          {/* Polling Status Indicator */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <div className="flex items-center justify-center gap-2">
+              {isPolling ? (
+                <>
+                  <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-sm text-blue-700">
+                    Mengecek status pembayaran... {lastPollTime && `(${lastPollTime})`}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <div className="w-3 h-3 bg-gray-400 rounded-full"></div>
+                  <span className="text-sm text-gray-600">Menunggu...</span>
+                </>
+              )}
+            </div>
+          </div>
+          
+          <div className="bg-gray-50 rounded-lg p-4 mb-4 text-left">
+            <div className="text-sm space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Nominal Transfer:</span>
+                <span className="font-bold text-gray-900">{formatCurrency(paymentOrder?.totalAmount || 0)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">ID Order:</span>
+                <span className="font-mono text-gray-900">{paymentOrder?.orderId}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Nama:</span>
+                <span className="text-gray-900">{paymentOrder?.customerName}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+            <div className="flex items-start gap-2">
+              <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <p className="font-medium">Sudah transfer tapi lama diverifikasi?</p>
+                <p className="mt-1">Hubungi bengkel untuk konfirmasi manual.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -326,15 +477,10 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
           <div className="text-sm text-blue-600 mb-1 font-medium">Jumlah Transfer (WAJIB SESUAI)</div>
           <div className="flex items-center justify-between">
             <div className="text-3xl font-bold">
-              {/* Highlight last 3 digits (unique code) in red */}
               {(() => {
-                const totalStr = (paymentOrder?.totalAmount || 0).toLocaleString('id-ID');
-                const baseStr = 'Rp ';
-                // Find where the unique code digits are (last 3 digits before any separator)
                 const numericPart = (paymentOrder?.totalAmount || 0).toString();
-                const uniqueCodeDigits = paymentOrder?.uniqueCode?.toString().padStart(3, '0') || '000';
+                const baseStr = 'Rp ';
                 
-                // Split the formatted number to highlight last 3 digit positions
                 if (numericPart.length > 3) {
                   const mainPart = numericPart.slice(0, -3);
                   const highlightPart = numericPart.slice(-3);
@@ -346,7 +492,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
                     </>
                   );
                 } else {
-                  return <span className="text-blue-700">{baseStr}{totalStr}</span>;
+                  return <span className="text-blue-700">{baseStr}{numericPart}</span>;
                 }
               })()}
             </div>
@@ -372,7 +518,7 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
             </button>
           </div>
           
-          {/* Amount breakdown with highlighted unique code */}
+          {/* Amount breakdown */}
           <div className="mt-3 pt-3 border-t border-blue-200 text-sm">
             <div className="flex justify-between text-gray-600">
               <span>Nominal asli:</span>
@@ -405,42 +551,29 @@ export const MootaPayment: React.FC<MootaPaymentProps> = ({
               <p className="text-sm text-yellow-700 font-medium">Penting!</p>
               <p className="text-sm text-yellow-600 mt-1">
                 Transfer dengan nominal <strong>PERSIS</strong> seperti di atas. 
-                Nominal berbeda tidak dapat diverifikasi otomatis.
+                Pembayaran akan diverifikasi oleh kasir.
               </p>
             </div>
           </div>
         </div>
 
-        {/* Check Payment Button */}
+        {/* Confirm Transfer Button */}
         <button
-          onClick={checkPaymentStatus}
-          disabled={isChecking}
-          className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+          onClick={handleConfirmTransfer}
+          className="w-full py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2 font-medium"
         >
-          {isChecking ? (
-            <>
-              <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Memeriksa Pembayaran...
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Saya Sudah Transfer
-            </>
-          )}
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Saya Sudah Transfer
         </button>
 
-        {/* Auto-check indicator */}
-        {autoCheck && (
-          <p className="text-center text-sm text-gray-500">
-            Status pembayaran diperiksa otomatis setiap {checkInterval} detik
+        {/* Manual verification info */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-center text-sm text-blue-700">
+            <span className="font-medium">Verifikasi Manual:</span> Pembayaran akan dikonfirmasi oleh kasir setelah Anda transfer.
           </p>
-        )}
+        </div>
 
         {/* Order Info */}
         <div className="text-center text-sm text-gray-500 pt-2 border-t">

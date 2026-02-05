@@ -8,15 +8,18 @@ import mootaService from '../../services/mootaService';
 import qrisService from '../../services/qrisService';
 import timeSlotService, { TimeSlot } from '../../services/timeSlotService';
 import workshopService, { PublicWorkshopInfo } from '../../services/workshopService';
+import { bookingService } from '../../services/bookingService';
 import { PaymentMethod } from '../../types';
 
 interface GuestBookingProps {
-    onSubmit: (data: any) => void;
+    onSubmit: (data: any) => Promise<any>; // Can return booking record
     onBack: () => void;
 }
 
 const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const { workshopSlug, branchCode } = useParams<{ workshopSlug?: string; branchCode?: string }>();
+    
+    console.log('[GuestBooking] Component mounted with URL params:', { workshopSlug, branchCode });
     
     const [step, setStep] = useState(1);
     const [branchId, setBranchId] = useState<string | null>(null);
@@ -43,6 +46,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const [paymentProofWebP, setPaymentProofWebP] = useState<string>('');
     const [timeSlots, setTimeSlots] = useState<TimeSlot[]>([]);
     const [bookingOrderId, setBookingOrderId] = useState<string>('');
+    const [createdBookingId, setCreatedBookingId] = useState<string | null>(null); // Track booking ID after payment
     const [isPaid, setIsPaid] = useState(false);
     const [mootaConfigured, setMootaConfigured] = useState(false);
     const [qrisConfigured, setQrisConfigured] = useState(false);
@@ -51,6 +55,11 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Debug: Track step changes
+    useEffect(() => {
+        console.log('[GuestBooking] Step changed to:', step);
+    }, [step]);
 
     // Load active payment method from localStorage (payment method is per-session)
     useEffect(() => {
@@ -284,12 +293,77 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
         setStep(2);
     };
 
-    const handlePaymentComplete = (order?: any) => {
+    const handlePaymentComplete = async (order?: any) => {
+        console.log('[GuestBooking] handlePaymentComplete called with order:', order);
         setIsPaid(true);
-        if (order) {
-            console.log('Payment confirmed via Moota:', order);
+        
+        // Langsung submit booking saat payment dikonfirmasi customer
+        // Ini mencegah data hilang jika customer refresh halaman
+        try {
+            console.log('[GuestBooking] Preparing to submit booking...');
+            console.log('[GuestBooking] Form data:', formData);
+            console.log('[GuestBooking] Order ID:', bookingOrderId);
+            console.log('[GuestBooking] Workshop:', workshop?.id);
+            
+            let audioBase64 = '';
+            if (audioBlob) {
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                await new Promise(resolve => {
+                    reader.onloadend = () => {
+                        audioBase64 = reader.result?.toString().split(',')[1] || '';
+                        resolve(null);
+                    };
+                });
+            }
+            
+            const bookingData = { 
+                ...formData, 
+                audioBase64,
+                paymentMethod: 'MOOTA',
+                paymentStatus: 'PENDING_VERIFICATION', // Admin perlu verifikasi
+                transferProofBase64: '',
+                paymentAmount,
+                orderId: bookingOrderId,
+                workshopId: workshop?.id || null,
+                workshopSlug: workshop?.slug || workshopSlug || null,
+                branchId: branchId || null,
+                branchCode: branchCode || null,
+            };
+            
+            console.log('[GuestBooking] Submitting booking data:', bookingData);
+            
+            // Submit booking langsung dengan status pending (menunggu verifikasi admin)
+            const createdBooking = await onSubmit(bookingData);
+            
+            // Store the booking ID for later update
+            if (createdBooking && createdBooking.id) {
+                setCreatedBookingId(createdBooking.id);
+                console.log('[GuestBooking] Booking ID stored:', createdBooking.id);
+            }
+            
+            console.log('[GuestBooking] Booking submitted successfully!');
+        } catch (error) {
+            console.error('[GuestBooking] Failed to submit booking:', error);
         }
+        
+        // JANGAN setStep(3) - biarkan customer tetap di step 2 
+        // MootaPayment akan menampilkan "Menunggu Verifikasi"
+        // Polling di MootaPayment akan detect saat admin verifikasi
+    };
+
+    // Handler ketika admin sudah verifikasi pembayaran
+    const handlePaymentVerified = (order: any) => {
+        console.log('[GuestBooking] ===== PAYMENT VERIFIED =====');
+        console.log('[GuestBooking] Payment verified by admin:', order);
+        console.log('[GuestBooking] Current step before:', step);
+        console.log('[GuestBooking] Setting isPaid to true...');
+        setIsPaid(true);
+        console.log('[GuestBooking] Setting step to 3...');
+        // Lanjut ke step 3 untuk input keluhan
         setStep(3);
+        console.log('[GuestBooking] Step set to 3, should render step 3 now');
+        console.log('[GuestBooking] ===========================');
     };
 
     const handlePaymentSuccess = () => {
@@ -321,19 +395,79 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
             paymentProofBase64 = paymentProofWebP.split(',')[1] || '';
         }
         
-        onSubmit({ 
-            ...formData, 
-            audioBase64,
-            paymentMethod: isPaid ? 'MOOTA' : 'TRANSFER',
-            transferProofBase64: paymentProofBase64, // Reusing same field name
-            paymentAmount,
-            orderId: bookingOrderId,
-            // Multi-tenant: include workshop and branch info
-            workshopId: workshop?.id || null,
-            workshopSlug: workshop?.slug || workshopSlug || null,
-            branchId: branchId || null,
-            branchCode: branchCode || null,
-        });
+        // If booking already exists (from payment step), UPDATE it with complaint
+        if (createdBookingId) {
+            console.log('[GuestBooking] Updating existing booking:', createdBookingId);
+            console.log('[GuestBooking] Complaint to update:', formData.complaint);
+            console.log('[GuestBooking] Audio base64 length:', audioBase64.length);
+            try {
+                // Update booking with complaint and audio using Supabase directly
+                const { supabase } = await import('../../lib/supabase');
+                const { data, error } = await supabase
+                    .from('bookings')
+                    .update({
+                        complaint: formData.complaint,
+                        audio_base64: audioBase64
+                    })
+                    .eq('id', createdBookingId)
+                    .select();
+                
+                if (error) {
+                    console.error('[GuestBooking] Update error:', error);
+                    throw error;
+                }
+                
+                console.log('[GuestBooking] Booking updated successfully:', data);
+                
+                // Get booking code from the updated record or use bookingOrderId
+                const bookingCode = (data && data.length > 0 && data[0].booking_code) || bookingOrderId;
+                console.log('[GuestBooking] Redirecting to tracking with booking code:', bookingCode);
+                console.log('[GuestBooking] Workshop slug:', workshop?.slug);
+                console.log('[GuestBooking] Branch code from URL params:', branchCode);
+                console.log('[GuestBooking] Branch ID from state:', branchId);
+                
+                // Use branchCode from URL params (not from state) to maintain consistency
+                const targetBranchCode = branchCode; // This is from useParams, always reflects the current URL
+                
+                // Navigate to tracking with branch code and booking code as query param
+                if (workshop?.slug && targetBranchCode) {
+                    const targetUrl = `/tracking/${workshop.slug}/${targetBranchCode}?code=${encodeURIComponent(bookingCode)}`;
+                    console.log('[GuestBooking] Redirecting to:', targetUrl);
+                    window.location.href = targetUrl;
+                } else if (workshop?.slug) {
+                    const targetUrl = `/tracking/${workshop.slug}?code=${encodeURIComponent(bookingCode)}`;
+                    console.log('[GuestBooking] Redirecting to (no branch):', targetUrl);
+                    window.location.href = targetUrl;
+                } else {
+                    console.log('[GuestBooking] Redirecting to default workshop');
+                    window.location.href = `/tracking/default-workshop?code=${encodeURIComponent(bookingCode)}`;
+                }
+            } catch (error) {
+                console.error('[GuestBooking] Failed to update booking:', error);
+                alert('Gagal menyimpan keluhan. Silakan coba lagi.');
+            }
+        } else {
+            // Fallback: Create new booking (for non-Moota payments)
+            await onSubmit({ 
+                ...formData, 
+                audioBase64,
+                paymentMethod: isPaid ? 'MOOTA' : 'TRANSFER',
+                transferProofBase64: paymentProofBase64,
+                paymentAmount,
+                orderId: bookingOrderId,
+                workshopId: workshop?.id || null,
+                workshopSlug: workshop?.slug || workshopSlug || null,
+                branchId: branchId || null,
+                branchCode: branchCode || null,
+            });
+            
+            // Manual redirect for fallback path
+            if (workshop?.slug && branchCode) {
+                window.location.href = `/tracking/${workshop.slug}/${branchCode}`;
+            } else if (workshop?.slug) {
+                window.location.href = `/tracking/${workshop.slug}`;
+            }
+        }
     };
 
     return (
@@ -590,6 +724,7 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                                         customerPhone={formData.phone}
                                         description={`Booking Fee - ${formData.vehicleModel} - ${formData.licensePlate}`}
                                         onPaymentComplete={handlePaymentComplete}
+                                        onPaymentVerified={handlePaymentVerified}
                                         onPaymentExpired={() => {
                                             alert('Waktu pembayaran habis. Silakan coba lagi.');
                                             setStep(1);

@@ -11,6 +11,23 @@ const MOOTA_API_BASE_URL = 'https://app.moota.co/api/v2';
 // Centralized API Key - not configurable by users
 const MOOTA_API_KEY = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiJucWllNHN3OGxsdyIsImp0aSI6IjE1NDI2ZWU3NWY1MTFjMjk2Y2VlNmI1YTNmZmE3YjU2MTA1NjEyZWRiODI4MzRhZWVmOTc2YzNhY2ZjMTJiMDE5NGQyMWFjOWVjOTQ5YjM5IiwiaWF0IjoxNzcwMjY1NzM0LjIxODI5OCwibmJmIjoxNzcwMjY1NzM0LjIxODMwMSwiZXhwIjoxODAxODAxNzM0LjIwNDg4OSwic3ViIjoiNDMyMDEiLCJzY29wZXMiOlsiYXBpIiwidXNlciIsInVzZXJfcmVhZCIsImJhbmsiLCJiYW5rX3JlYWQiLCJtdXRhdGlvbiIsIm11dGF0aW9uX3JlYWQiXX0.SqvvspTbzKxUffLnAJp0vKXWcZzF5oVdxAN5kjgo09LmBsFIPqAaWsRrxSuPsIdWQ1qVV1FL9UjpkGPxbgWNRA2bPFKDF6kg07heFPjBVSRomHrJtslgApK6vaWH42CXyqx-TyRdwrjClx9AmM2GnOJ3oalByOzE_3dwOXg4N3xbv6V_99nQGDVzYP3TNA0RpUdtmilbAIr3eMlOPajq6CR8kwkVQPouq9Vqgy43T--H5GdLubhn6MOnTpZtVsxUu4D39pbWbAfiQIX2r3emie7B7hP1_PdCbstagKDvNLUr2mOEquf0rzlGt4fLeld7Rf2W8vYcKMCYQIRtk3kn_p4Hcu_EJh-_x7z5YjgfvxVqWKJrsJOjHRg00uNL5RXzQTHA4pQeaVL3MCfmWBUj2N6KqB2-YjBztJMIVpywWNu49Q13R5IxXcYhECGBk8MDm_XZeej0G089U8u_PRwDpdas1ZUkzGmY7SNVwwU00CiBFHPUi5ucaUYxGyTDxG22NDhv5MB00L9CqjZldcexeenahMsJAC63Q0A_8_iZAD-j52hO2UyvLE38iVJRTkZego2XiaDzrFLSr7NJ1gtviouMSbBuZ21qDeYpxr2IYeTxVDpwjT9JhkooN2ATS5eLK-czMFXE0mjdY0T2trLj5eBj2KkqeSfjHQ8tV2zht2E';
 
+// ============================================
+// HARDCODED MOOTA BANK CONFIGURATION
+// This is fixed configuration, users don't need to configure
+// ============================================
+const MOOTA_BANK_CONFIG: MootaSettings = {
+  accessToken: MOOTA_API_KEY,
+  bankAccountId: '', // Will be fetched from Moota API automatically
+  bankAccountName: 'PT Aplikasi Bengkel', // Company name
+  accountNumber: '', // Will be fetched from Moota API automatically
+  bankType: '', // Will be fetched from Moota API automatically
+  secretToken: 'ABE_MOOTA_WEBHOOK_SECRET_2024',
+  webhookUrl: '',
+  uniqueCodeStart: 1,
+  uniqueCodeEnd: 999,
+  isActive: true
+};
+
 export interface MootaSettings {
   id?: string;
   accessToken: string;
@@ -226,23 +243,9 @@ class MootaService {
   }
 
   async getActiveSettings(): Promise<MootaSettings | null> {
+    // Always use hardcoded settings - no database lookup needed
     try {
-      const branchId = getStoredBranchId();
-      
-      let query = supabase
-        .from(this.TABLE_NAME)
-        .select('*')
-        .eq('is_active', true);
-      
-      if (branchId) {
-        query = query.eq('branch_id', branchId);
-      }
-      
-      const { data, error } = await query.single();
-
-      if (error || !data) return null;
-
-      return this.mapToMootaSettings(data);
+      return await this.getHardcodedSettings();
     } catch (error) {
       console.error('Failed to get active Moota settings:', error);
       return null;
@@ -365,6 +368,54 @@ class MootaService {
   }
 
   // ============================================
+  // HARDCODED CONFIGURATION - No DB storage needed
+  // ============================================
+
+  /**
+   * Get the hardcoded Moota configuration.
+   * This fetches the first active bank account from Moota API automatically.
+   * No database storage needed - configuration is centralized here.
+   */
+  async getHardcodedSettings(): Promise<MootaSettings | null> {
+    try {
+      // Fetch bank accounts from Moota API
+      const bankAccounts = await this.getBankAccounts();
+      
+      if (bankAccounts.length === 0) {
+        console.warn('No bank accounts found in Moota');
+        return null;
+      }
+      
+      // Use the first active bank account
+      const activeBank = bankAccounts.find(b => b.is_active) || bankAccounts[0];
+      
+      // Return hardcoded config with bank info from API
+      return {
+        ...MOOTA_BANK_CONFIG,
+        bankAccountId: activeBank.bank_id,
+        bankAccountName: activeBank.atas_nama,
+        accountNumber: activeBank.account_number,
+        bankType: activeBank.bank_type
+      };
+    } catch (error) {
+      console.error('Failed to get hardcoded Moota settings:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Check if Moota is properly configured (API key valid, bank account exists)
+   */
+  async isMootaConfigured(): Promise<boolean> {
+    try {
+      const settings = await this.getHardcodedSettings();
+      return settings !== null && !!settings.bankAccountId;
+    } catch {
+      return false;
+    }
+  }
+
+  // ============================================
   // BANK ACCOUNT OPERATIONS
   // ============================================
 
@@ -446,6 +497,13 @@ class MootaService {
     description?: string
   ): Promise<PaymentOrder> {
     try {
+      // Check if order already exists - return existing order
+      const existingOrder = await this.getPaymentOrder(orderId);
+      if (existingOrder) {
+        console.log('[createPaymentOrder] Order already exists, returning existing:', orderId);
+        return existingOrder;
+      }
+
       const settings = await this.getActiveSettings();
       if (!settings) {
         throw new Error('Moota settings not configured');
@@ -474,7 +532,15 @@ class MootaService {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Handle duplicate key - try to get existing order again
+        if (error.code === '23505') {
+          console.log('[createPaymentOrder] Duplicate detected, fetching existing order');
+          const existing = await this.getPaymentOrder(orderId);
+          if (existing) return existing;
+        }
+        throw error;
+      }
 
       return this.mapToPaymentOrder(data);
     } catch (error) {
@@ -538,8 +604,10 @@ class MootaService {
     orderId: string,
     status: PaymentOrder['status'],
     mutationId?: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
+      console.log(`[updatePaymentOrderStatus] Updating order ${orderId} to status: ${status}`);
+      
       const updateData: any = { status };
       
       if (status === 'PAID') {
@@ -549,12 +617,28 @@ class MootaService {
         updateData.mutation_id = mutationId;
       }
 
-      const { error } = await supabase
+      console.log(`[updatePaymentOrderStatus] Update data:`, updateData);
+
+      const { data, error } = await supabase
         .from(this.ORDERS_TABLE)
         .update(updateData)
-        .eq('order_id', orderId);
+        .eq('order_id', orderId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error(`[updatePaymentOrderStatus] Supabase error:`, error);
+        throw error;
+      }
+
+      console.log(`[updatePaymentOrderStatus] Update result:`, data);
+      
+      if (!data || data.length === 0) {
+        console.warn(`[updatePaymentOrderStatus] No rows updated for order ${orderId}`);
+        return false;
+      }
+
+      console.log(`[updatePaymentOrderStatus] Successfully updated order ${orderId} to ${status}`);
+      return true;
     } catch (error) {
       console.error('Failed to update payment order:', error);
       throw error;
