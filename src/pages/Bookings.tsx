@@ -174,9 +174,9 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                     </td>
                                     <td className="p-4 md:p-5">
                                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${b.status === BookingStatus.CONFIRMED ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
-                                                b.status === BookingStatus.REJECTED ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                                                    b.status === BookingStatus.CHECKED_IN ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                                        'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                            b.status === BookingStatus.REJECTED ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                                                b.status === BookingStatus.CHECKED_IN ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                                                    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                                             }`}>
                                             {b.status === BookingStatus.CHECKED_IN ? 'COMPLETED' : b.status.replace('_', ' ')}
                                         </span>
@@ -223,6 +223,13 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                         </div>
 
                         <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-h-[60vh] overflow-y-auto">
+                            {/* Debug: Log transfer proof data */}
+                            {console.log('[Bookings] Selected booking transfer proof:', {
+                                hasProof: !!selectedBooking.transferProofBase64,
+                                proofLength: selectedBooking.transferProofBase64?.length || 0,
+                                proofPreview: selectedBooking.transferProofBase64?.substring(0, 50) || 'N/A'
+                            })}
+
                             {/* Customer & Vehicle Info */}
                             <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-border-light dark:border-slate-700">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -300,7 +307,7 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                             </div>
 
                             {/* Payment Information */}
-                            {selectedBooking.paymentMethod && (
+                            {(selectedBooking.paymentMethod || selectedBooking.transferProofBase64) && (
                                 <div className="bg-white dark:bg-slate-800/30 border border-border-light dark:border-slate-700 p-4 rounded-xl">
                                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                                         <span className="material-symbols-outlined text-base">payment</span>
@@ -324,17 +331,25 @@ const Bookings: React.FC<BookingsProps> = ({ bookings, setBookings, onAddToQueue
                                         </div>
                                         {selectedBooking.transferProofBase64 && (
                                             <div className="md:col-span-2">
-                                                <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Payment Proof (WebP)</p>
+                                                <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">Payment Proof</p>
                                                 <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                                                     <img
-                                                        src={`data:image/webp;base64,${selectedBooking.transferProofBase64}`}
+                                                        src={
+                                                            selectedBooking.transferProofBase64.startsWith('data:')
+                                                                ? selectedBooking.transferProofBase64
+                                                                : `data:image/webp;base64,${selectedBooking.transferProofBase64}`
+                                                        }
                                                         alt="Payment proof"
                                                         className="w-full max-w-md mx-auto object-contain"
-                                                        style={{ maxHeight: '200px' }}
+                                                        style={{ maxHeight: '400px' }}
+                                                        onError={(e) => {
+                                                            console.error('[Bookings] Image load error:', e);
+                                                            console.log('[Bookings] Image src:', (e.target as HTMLImageElement).src.substring(0, 100));
+                                                        }}
                                                     />
                                                 </div>
                                                 <p className="text-xs text-slate-500 mt-2 text-center">
-                                                    Screenshot/foto bukti pembayaran QRIS customer
+                                                    Screenshot/foto bukti pembayaran customer
                                                 </p>
                                             </div>
                                         )}

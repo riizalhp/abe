@@ -60,7 +60,7 @@ function AppContent() {
       setReminders([]);
       return;
     }
-    
+
     try {
       const [u, q, h, b, r] = await Promise.all([
         userService.getAll(),
@@ -85,7 +85,7 @@ function AppContent() {
       console.log('Branch changed, refreshing data...');
       setBranchChangeCounter(prev => prev + 1);
     };
-    
+
     window.addEventListener('branchChanged', handleBranchChange);
     return () => window.removeEventListener('branchChanged', handleBranchChange);
   }, []);
@@ -104,7 +104,7 @@ function AppContent() {
   const handleAddUser = async (user: Partial<User>) => {
     try {
       console.log('Creating user with data:', user);
-      
+
       // Sanitize user input
       const sanitizedUser = {
         ...user,
@@ -114,7 +114,7 @@ function AppContent() {
         role: user.role || Role.MEKANIK,
         avatar: user.avatar || '',
       };
-      
+
       const newUser = await userService.create({
         ...sanitizedUser,
         status: 'ACTIVE',
@@ -171,9 +171,9 @@ function AppContent() {
       // Validasi: Jika mulai pekerjaan (PROCESS), cek apakah mekanik sudah punya job aktif
       if (status === QueueStatus.PROCESS && mechanicId) {
         const mechanicActiveJob = queue.find(
-          q => q.mechanicId === mechanicId && 
-               (q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING) &&
-               q.id !== id
+          q => q.mechanicId === mechanicId &&
+            (q.status === QueueStatus.PROCESS || q.status === QueueStatus.PENDING) &&
+            q.id !== id
         );
         if (mechanicActiveJob) {
           const mechanic = users.find(u => u.id === mechanicId);
@@ -232,29 +232,31 @@ function AppContent() {
         // Payment info disimpan di payment_orders table, bukan di bookings
         workshopId: data.workshopId,
         workshopSlug: data.workshopSlug,
+        branchId: data.branchId,
+        transferProofBase64: data.transferProofBase64,
       };
-      
+
       console.log('[App] Creating booking with:', bookingData);
       const newBooking = await bookingService.create(bookingData);
       console.log('[App] Booking created:', newBooking);
-      
+
       setBookings([...bookings, newBooking]);
       setActiveTrackingCode(newBooking.bookingCode);
-      
+
       // Jika ini dari Moota payment yang masih pending verification,
       // jangan navigate - biarkan customer tetap di halaman menunggu verifikasi
       if (data.paymentStatus === 'PENDING_VERIFICATION') {
         console.log('[App] Booking created with pending payment verification:', newBooking.bookingCode);
         return newBooking; // Return booking untuk disimpan di GuestBooking
       }
-      
+
       // Navigate to tracking with workshop slug if available
       if (currentWorkshop?.slug) {
         navigate(`/tracking/${currentWorkshop.slug}`);
       } else {
         navigate('/tracking/default-workshop');
       }
-      
+
       return newBooking; // Return booking
     } catch (e) {
       console.error('[App] Failed to submit booking:', e);
@@ -280,8 +282,8 @@ function AppContent() {
       .reduce((sum, h) => sum + (h.totalCost || 0), 0);
 
     // Calculate growth percentage
-    const growthPercentage = revenueYesterday > 0 
-      ? ((revenueToday - revenueYesterday) / revenueYesterday) * 100 
+    const growthPercentage = revenueYesterday > 0
+      ? ((revenueToday - revenueYesterday) / revenueYesterday) * 100
       : revenueToday > 0 ? 100 : 0;
 
     return {
@@ -330,7 +332,7 @@ function AppContent() {
 
   return (
     <ErrorBoundary>
-        <Routes>
+      <Routes>
         {/* Public Routes */}
         <Route
           path="/"

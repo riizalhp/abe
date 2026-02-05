@@ -8,17 +8,17 @@ export const bookingService = {
     async getAll(): Promise<BookingRecord[]> {
         const workshopId = getStoredWorkshopId();
         const branchId = getStoredBranchId();
-        
+
         let query = supabase
             .from('bookings')
             .select('*')
             .order('created_at', { ascending: false });
-        
+
         // Filter by workshop_id if user is logged in
         if (workshopId) {
             query = query.eq('workshop_id', workshopId);
         }
-        
+
         // Filter by branch_id if branch is selected
         if (branchId) {
             query = query.eq('branch_id', branchId);
@@ -34,21 +34,21 @@ export const bookingService = {
         const workshopId = getStoredWorkshopId();
         const branchId = getStoredBranchId();
         const dbBooking = mapToDbBooking(booking);
-        
+
         // Set workshop_id if logged in, or use provided workshopId
         if (workshopId) {
             dbBooking.workshop_id = workshopId;
         } else if (booking.workshopId) {
             dbBooking.workshop_id = booking.workshopId;
         }
-        
+
         // Set branch_id - prioritize provided branchId from URL, then stored branchId
         if ((booking as any).branchId) {
             dbBooking.branch_id = (booking as any).branchId;
         } else if (branchId) {
             dbBooking.branch_id = branchId;
         }
-        
+
         const { data, error } = await supabase
             .from('bookings')
             .insert([dbBooking])
@@ -114,7 +114,8 @@ const mapToDbBooking = (booking: Partial<BookingRecord>): any => {
     // Columns that don't exist in bookings table - skip them:
     // - payment_method (stored in payment_orders)
     // - payment_amount (stored in payment_orders)
-    // - transfer_proof_base64 (not used with Moota)
+    if (booking.transferProofBase64) dbBooking.transfer_proof_base64 = booking.transferProofBase64;
+    // - transfer_proof_base64 (not used with Moota) - UPDATE: Used for QRIS/Manual
     if (booking.workshopId) dbBooking.workshop_id = booking.workshopId;
     return dbBooking;
 }

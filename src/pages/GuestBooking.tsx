@@ -406,7 +406,8 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                     .from('bookings')
                     .update({
                         complaint: formData.complaint,
-                        audio_base64: audioBase64
+                        audio_base64: audioBase64,
+                        transfer_proof_base64: paymentProofBase64
                     })
                     .eq('id', createdBookingId)
                     .select();
@@ -420,6 +421,13 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
 
                 // Get booking code from the updated record or use bookingOrderId
                 const bookingCode = (data && data.length > 0 && data[0].booking_code) || bookingOrderId;
+                console.log('[GuestBooking] ===== BOOKING CODE DEBUG =====');
+                console.log('[GuestBooking] Data from update:', data);
+                console.log('[GuestBooking] Data[0]:', data && data.length > 0 ? data[0] : 'NO DATA');
+                console.log('[GuestBooking] Data[0].booking_code:', data && data.length > 0 ? data[0].booking_code : 'NO BOOKING CODE');
+                console.log('[GuestBooking] bookingOrderId fallback:', bookingOrderId);
+                console.log('[GuestBooking] Final bookingCode:', bookingCode);
+                console.log('[GuestBooking] ==============================');
                 console.log('[GuestBooking] Redirecting to tracking with booking code:', bookingCode);
                 console.log('[GuestBooking] Workshop slug:', workshop?.slug);
                 console.log('[GuestBooking] Branch code from URL params:', branchCode);
@@ -460,11 +468,18 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
                 branchCode: branchCode || null,
             });
 
-            // Manual redirect for fallback path
+            // Manual redirect for fallback path with booking code
+            const finalBookingCode = bookingOrderId; // Use the order ID as booking code for fallback
+            console.log('[GuestBooking] Fallback redirect with booking code:', finalBookingCode);
+
             if (workshop?.slug && branchCode) {
-                window.location.href = `/tracking/${workshop.slug}/${branchCode}`;
+                const targetUrl = `/tracking/${workshop.slug}/${branchCode}?code=${encodeURIComponent(finalBookingCode)}`;
+                console.log('[GuestBooking] Fallback redirecting to:', targetUrl);
+                window.location.href = targetUrl;
             } else if (workshop?.slug) {
-                window.location.href = `/tracking/${workshop.slug}`;
+                const targetUrl = `/tracking/${workshop.slug}?code=${encodeURIComponent(finalBookingCode)}`;
+                console.log('[GuestBooking] Fallback redirecting to (no branch):', targetUrl);
+                window.location.href = targetUrl;
             }
         }
     };
