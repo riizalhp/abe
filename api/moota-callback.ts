@@ -16,6 +16,27 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
 
+// Disable body parsing untuk akses raw body
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+// Helper untuk read raw body
+async function getRawBody(req: VercelRequest): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', (chunk) => {
+      data += chunk;
+    });
+    req.on('end', () => {
+      resolve(data);
+    });
+    req.on('error', reject);
+  });
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only accept POST
   if (req.method !== 'POST') {
@@ -24,12 +45,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     console.log('[Moota Webhook] Received request');
+    
+    // Whitelist IP Moota
+    const clientIp = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || 'unknown';
+    const mootaIp = '103.236.201.178';
+    
+    console.log('[Moota Webhook] Client IP:', clientIp);
+    
+    // Optional: Uncomment untuk enforce IP whitelist
+    // if (clientIp !== mootaIp) {
+    //   console.error('[Moota Webhook] Unauthorized IP:', clientIp);
+    //   return res.status(403).json({ error: 'Forbidden: Invalid IP address' });
+    // }
+    
+    // Get raw body untuk signature verification
+    const rawBody = await getRawBody(req);
+    const body = JSON.parse(rawBody);
+    
     console.log('[Moota Webhook] Headers:', JSON.stringify(req.headers));
-    console.log('[Moota Webhook] Body:', JSON.stringify(req.body));
+    console.log('[Moota Webhook] Raw body length:', rawBody.length);
     
     // 1. Verify signature dari Moota
-    const payload = JSON.stringify(req.body);
-    const signature = req.headers['signature'] as string || req.headers['x-signature'] as string;
+    // Moota kirim header "Signature" (kapital S)
+    const signature = req.headers['signature'] as string || req.headers['Signature'] as string;
     const secretToken = process.env.MOOTA_SECRET_TOKEN;
 
     console.log('[Moota Webhook] Signature from header:', signature);
@@ -40,8 +78,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Missing credentials' });
     }
 
+    // Calculate expected signature dari raw body
     const hmac = crypto.createHmac('sha256', secretToken);
-    hmac.update(payload);
+    hmac.update(rawBody); // Use raw body, bukan JSON.stringify(body)
     const expectedSignature = hmac.digest('hex');
 
     console.log('[Moota Webhook] Expected signature:', expectedSignature);
@@ -49,7 +88,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (signature !== expectedSignature) {
       console.error('[Moota Webhook] Invalid signature');
-      return res.status(401).json({ error: 'Invalid signature', expected: expectedSignature, received: signature });
+      return res.status(401).json({ 
+        error: 'Invalid signature',
+        expected: expectedSignature,
+        received: signature 
+      });
     }
 
     console.log('[Moota Webhook] Signature verified');
@@ -66,7 +109,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // 3. Process mutations
-    const mutations = Array.isArray(req.body) ? req.body : [req.body];
+    const mutations = Array.isArray(body) ? body : [body];
     console.log(`[Moota Webhook] Processing ${mutations.length} mutations`);
 
     let processed = 0;
