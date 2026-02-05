@@ -634,6 +634,8 @@ export async function createTimeSlot(
 
 // Get workshop settings (returns merged settings with defaults)
 export async function getWorkshopSettings(workshopId: string): Promise<Record<string, any>> {
+  console.log('[getWorkshopSettings] Fetching settings for workshop:', workshopId);
+  
   const { data, error } = await supabase
     .from('workshops')
     .select('settings')
@@ -641,15 +643,20 @@ export async function getWorkshopSettings(workshopId: string): Promise<Record<st
     .single();
 
   if (error || !data) {
-    console.error('Error fetching workshop settings:', error);
+    console.error('[getWorkshopSettings] Error fetching workshop settings:', error);
     return { booking_fee: 25000 }; // Default values
   }
 
+  console.log('[getWorkshopSettings] Raw settings from DB:', data.settings);
+
   // Return settings with default values for missing fields
-  return {
+  const result = {
     booking_fee: 25000,
     ...data.settings,
   };
+  
+  console.log('[getWorkshopSettings] Merged settings:', result);
+  return result;
 }
 
 // Update workshop settings (partial update)
@@ -657,6 +664,8 @@ export async function updateWorkshopSettings(
   workshopId: string,
   updates: Record<string, any>
 ): Promise<{ success: boolean; error: string | null }> {
+  console.log('[updateWorkshopSettings] Updating settings for workshop:', workshopId, 'with:', updates);
+  
   try {
     // First get current settings
     const { data: currentData } = await supabase
@@ -693,8 +702,11 @@ export async function updateWorkshopSettings(
 
 // Get booking fee for a workshop
 export async function getBookingFee(workshopId: string): Promise<number> {
+  console.log('[getBookingFee] Getting booking fee for workshop:', workshopId);
   const settings = await getWorkshopSettings(workshopId);
-  return settings.booking_fee || 25000;
+  const fee = settings.booking_fee || 25000;
+  console.log('[getBookingFee] Returning booking fee:', fee);
+  return fee;
 }
 
 // Update booking fee for a workshop

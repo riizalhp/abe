@@ -85,11 +85,28 @@ export const PaymentSettings: React.FC = () => {
   }, []);
 
   // Load default amount from Supabase workshop settings
+  // Also migrates from localStorage if Supabase is empty
   const loadDefaultAmount = useCallback(async () => {
     try {
       const workshopId = workshopService.getCurrentWorkshopId();
       if (workshopId) {
         const bookingFee = await workshopService.getBookingFee(workshopId);
+        
+        // Check if we need to migrate from localStorage
+        // If Supabase has default (25000) but localStorage has different value, migrate it
+        const localStorageFee = localStorage.getItem('booking_fee');
+        if (localStorageFee) {
+          const localFee = parseInt(localStorageFee, 10);
+          if (!isNaN(localFee) && localFee !== bookingFee && localFee > 0) {
+            console.log('[PaymentSettings] Migrating booking_fee from localStorage to Supabase:', localFee);
+            await workshopService.updateBookingFee(workshopId, localFee);
+            setDefaultAmount(localFee);
+            // Clear localStorage after migration
+            localStorage.removeItem('booking_fee');
+            return;
+          }
+        }
+        
         setDefaultAmount(bookingFee);
       }
     } catch (error) {

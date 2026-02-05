@@ -67,7 +67,9 @@ const GuestBooking: React.FC<GuestBookingProps> = ({ onSubmit, onBack }) => {
             setWorkshopError(null);
             
             if (workshopSlug) {
+                console.log('[GuestBooking] Loading workshop with slug:', workshopSlug);
                 const info = await workshopService.getPublicWorkshopInfo(workshopSlug);
+                console.log('[GuestBooking] Workshop info:', info);
                 if (info) {
                     setWorkshop(info);
                     
