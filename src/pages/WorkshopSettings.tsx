@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import workshopService, { 
-  getWorkshopById, 
-  getWorkshopStaff, 
+import workshopService, {
+  getWorkshopById,
+  getWorkshopStaff,
   removeStaffFromWorkshop,
   updateWorkshop,
   getWorkshopBySlug
@@ -19,7 +19,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
   const [staff, setStaff] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'general' | 'staff'>('general');
-  
+
   // Form states
   const [workshopName, setWorkshopName] = useState('');
   const [workshopSlug, setWorkshopSlug] = useState('');
@@ -27,12 +27,12 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
   const [workshopPhone, setWorkshopPhone] = useState('');
   const [workshopEmail, setWorkshopEmail] = useState('');
   const [workshopDescription, setWorkshopDescription] = useState('');
-  
+
   // Slug validation
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
   const [slugError, setSlugError] = useState<string | null>(null);
   const [slugAvailable, setSlugAvailable] = useState<boolean | null>(null);
-  
+
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -45,7 +45,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
           getWorkshopById(currentUser.workshopId),
           getWorkshopStaff(currentUser.workshopId, branchId)
         ]);
-        
+
         if (ws) {
           setWorkshop(ws);
           setWorkshopName(ws.name);
@@ -57,7 +57,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
           setSlugAvailable(null);
           setSlugError(null);
         }
-        
+
         setStaff(staffList);
       }
     } catch (error) {
@@ -70,12 +70,12 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
 
   useEffect(() => {
     loadWorkshopData();
-    
+
     // Listen for branch change
     const handleBranchChange = () => {
       loadWorkshopData();
     };
-    
+
     window.addEventListener('branchChanged', handleBranchChange);
     return () => window.removeEventListener('branchChanged', handleBranchChange);
   }, [loadWorkshopData]);
@@ -106,7 +106,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
 
     setIsCheckingSlug(true);
     setSlugError(null);
-    
+
     try {
       const existingWorkshop = await getWorkshopBySlug(slug);
       if (existingWorkshop && existingWorkshop.id !== workshop.id) {
@@ -132,11 +132,11 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
       setSlugError(null);
       return;
     }
-    
+
     const timer = setTimeout(() => {
       checkSlugAvailability(workshopSlug);
     }, 500);
-    
+
     return () => clearTimeout(timer);
   }, [workshopSlug, workshop?.slug]);
 
@@ -147,16 +147,16 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
 
   const handleSaveWorkshop = async () => {
     if (!workshop) return;
-    
+
     // Validate slug before saving
     if (workshopSlug !== workshop.slug && slugAvailable === false) {
       setMessage({ type: 'error', text: slugError || 'Slug tidak tersedia' });
       return;
     }
-    
+
     setIsSaving(true);
     setMessage(null);
-    
+
     try {
       const result = await updateWorkshop(workshop.id, {
         name: workshopName,
@@ -165,15 +165,30 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
         phone: workshopPhone,
         description: workshopDescription
       });
-      
+
       if (result.success) {
         setMessage({ type: 'success', text: 'Workshop berhasil diperbarui!' });
+
+        setWorkshop(prev => prev ? ({
+          ...prev,
+          name: workshopName,
+          address: workshopAddress,
+          phone: workshopPhone,
+          description: workshopDescription,
+          slug: workshopSlug !== prev.slug ? workshopSlug : prev.slug
+        }) : null);
+
         loadWorkshopData();
       } else {
-        setMessage({ type: 'error', text: result.error || 'Gagal memperbarui workshop' });
+        console.error("Save Error:", result.error);
+        if (result.error && result.error.includes('Unauthorized')) {
+          setMessage({ type: 'error', text: 'Gagal: Masalah izin akses. Coba logout dan login kembali.' });
+        } else {
+          setMessage({ type: 'error', text: result.error || 'Gagal memperbarui workshop' });
+        }
       }
     } catch (error) {
-      setMessage({ type: 'error', text: 'Terjadi kesalahan' });
+      setMessage({ type: 'error', text: 'Terjadi kesalahan saat menyimpan' });
     } finally {
       setIsSaving(false);
     }
@@ -182,7 +197,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
   const handleRemoveStaff = async (userId: string, userName: string) => {
     if (!workshop) return;
     if (!confirm(`Hapus ${userName} dari workshop?`)) return;
-    
+
     try {
       const result = await removeStaffFromWorkshop(workshop.id, userId);
       if (result.success) {
@@ -239,9 +254,8 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
 
       {/* Message */}
       {message && (
-        <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${
-          message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
-        }`}>
+        <div className={`mb-6 p-4 rounded-lg flex items-center gap-3 ${message.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+          }`}>
           <span className="material-symbols-outlined">
             {message.type === 'success' ? 'check_circle' : 'error'}
           </span>
@@ -255,14 +269,14 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
         <p className="text-white/80 text-sm mb-4">Bagikan link ini kepada pelanggan untuk booking online di cabang ini</p>
         <div className="flex items-center gap-3">
           <div className="flex-1 bg-white/20 rounded-lg px-4 py-3 font-mono text-sm overflow-x-auto">
-            {activeBranch 
+            {activeBranch
               ? `${window.location.origin}/booking/${workshop.slug}/${activeBranch.code}`
               : `${window.location.origin}/booking/${workshop.slug}`
             }
           </div>
           <button
             onClick={() => {
-              const url = activeBranch 
+              const url = activeBranch
                 ? `${window.location.origin}/booking/${workshop.slug}/${activeBranch.code}`
                 : `${window.location.origin}/booking/${workshop.slug}`;
               navigator.clipboard.writeText(url);
@@ -284,11 +298,10 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as any)}
-            className={`flex items-center gap-2 px-4 py-3 font-medium border-b-2 transition-colors ${
-              activeTab === tab.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
+            className={`flex items-center gap-2 px-4 py-3 font-medium border-b-2 transition-colors ${activeTab === tab.key
+              ? 'border-primary text-primary'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
           >
             <span className="material-symbols-outlined text-xl">{tab.icon}</span>
             {tab.label}
@@ -311,39 +324,19 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Slug URL</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Slug URL
+                <span className="ml-2 text-xs font-normal text-gray-400">(tidak dapat diubah)</span>
+              </label>
               <div className="relative">
                 <input
                   type="text"
                   value={workshopSlug}
-                  onChange={(e) => handleSlugChange(e.target.value)}
-                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary pr-10 ${
-                    slugError ? 'border-red-300 bg-red-50' : slugAvailable === true ? 'border-green-300 bg-green-50' : 'border-gray-300'
-                  }`}
+                  disabled
+                  className="w-full p-3 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 cursor-not-allowed"
                   placeholder="slug-bengkel-anda"
                 />
-                {isCheckingSlug && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
-                  </div>
-                )}
-                {!isCheckingSlug && slugAvailable === true && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <span className="material-symbols-outlined text-green-500">check_circle</span>
-                  </div>
-                )}
-                {!isCheckingSlug && slugError && (
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <span className="material-symbols-outlined text-red-500">error</span>
-                  </div>
-                )}
               </div>
-              {slugError && (
-                <p className="text-xs text-red-500 mt-1">{slugError}</p>
-              )}
-              {slugAvailable === true && (
-                <p className="text-xs text-green-500 mt-1">Slug tersedia!</p>
-              )}
               <p className="text-xs text-gray-500 mt-1">URL: /booking/{workshopSlug || workshop.slug}</p>
             </div>
             <div>
@@ -391,7 +384,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
               />
             </div>
           </div>
-          
+
           <div className="mt-6 pt-6 border-t border-gray-200 flex justify-end">
             <button
               onClick={handleSaveWorkshop}
@@ -420,7 +413,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
           <div className="p-4 border-b border-gray-200 bg-gray-50">
             <h3 className="font-semibold text-gray-900">Daftar Staff ({staff.length})</h3>
           </div>
-          
+
           {staff.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
               <span className="material-symbols-outlined text-4xl mb-2">group_off</span>
@@ -444,7 +437,7 @@ const WorkshopSettings: React.FC<WorkshopSettingsProps> = ({ currentUser }) => {
                       <p className="text-sm text-gray-500">{member.role} • {member.email || member.username}</p>
                     </div>
                   </div>
-                  
+
                   {!member.isOwner && currentUser.isOwner && (
                     <button
                       onClick={() => handleRemoveStaff(member.id, member.name)}

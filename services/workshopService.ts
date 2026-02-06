@@ -231,14 +231,54 @@ export async function updateWorkshop(
   if (updates.isActive !== undefined) dbUpdates.is_active = updates.isActive;
   if (updates.paymentMethod !== undefined) dbUpdates.payment_method = updates.paymentMethod;
 
-  const { error } = await supabase
-    .from('workshops')
-    .update(dbUpdates)
-    .eq('id', workshopId);
+  // Use RPC for secure update
+  if (updates.name || updates.address || updates.phone || updates.description) {
+    const { data, error } = await supabase.rpc('update_workshop_details', {
+      p_workshop_id: workshopId,
+      p_name: updates.name || null,
+      p_address: updates.address || null,
+      p_phone: updates.phone || null,
+      p_description: updates.description || null
+    });
 
-  if (error) {
-    console.error('Error updating workshop:', error);
-    return { success: false, error: error.message };
+    if (error) {
+      console.error('Error updating workshop via RPC:', error);
+      return { success: false, error: error.message };
+    }
+
+    if (data && !data.success) {
+      return { success: false, error: data.error || 'Failed to update workshop' };
+    }
+  }
+
+  // Separate update for fields not in RPC (like settings, logoUrl, etc.) if needed
+  // But for WorkshopSettings form, these are the main fields.
+  // Ideally, if we have other fields, we should update them too.
+
+  const additionalUpdates: Record<string, any> = {};
+  if (updates.slug) {
+    // Validate slug uniqueness before updating
+    const existingWorkshop = await getWorkshopBySlug(updates.slug);
+    if (existingWorkshop && existingWorkshop.id !== workshopId) {
+      return { success: false, error: 'Slug sudah digunakan oleh bengkel lain' };
+    }
+    additionalUpdates.slug = updates.slug;
+  }
+
+  if (updates.logoUrl !== undefined) additionalUpdates.logo_url = updates.logoUrl;
+  if (updates.isActive !== undefined) additionalUpdates.is_active = updates.isActive;
+  if (updates.paymentMethod !== undefined) additionalUpdates.payment_method = updates.paymentMethod;
+
+  if (Object.keys(additionalUpdates).length > 0) {
+    const { error } = await supabase
+      .from('workshops')
+      .update(additionalUpdates)
+      .eq('id', workshopId);
+
+    if (error) {
+      console.error('Error updating additional workshop fields:', error);
+      return { success: false, error: error.message };
+    }
   }
 
   return { success: true, error: null };

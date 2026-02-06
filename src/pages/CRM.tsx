@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { CalendarClock } from 'lucide-react';
 import { ServiceRecord, ServiceReminder } from '../../types';
-import { predictServiceSchedule, generateMarketingMessage } from '../../services/geminiService';
+import { generateMarketingMessage } from '../../services/geminiService';
 import { reminderService } from '../../services/reminderService';
 
 interface CRMProps {
@@ -12,14 +11,6 @@ interface CRMProps {
 
 const CRM: React.FC<CRMProps> = ({ history, reminders, setReminders }) => {
     const [generating, setGenerating] = useState<string | null>(null);
-
-    const runAutoScheduler = async () => {
-        // In a real app this would probably process logic on backend or comprehensive frontend logic.
-        // For now we just mock the AI alert.
-        const historyText = history.slice(0, 3).map(h => `${h.vehicleModel} (${h.finishTime}) - ${h.diagnosis}`).join('; ');
-        const prediction = await predictServiceSchedule(historyText);
-        alert(`AI Prediction: ${prediction}`);
-    };
 
     const handleGenerateMessage = async (reminder: ServiceReminder) => {
         setGenerating(reminder.id);
@@ -38,9 +29,9 @@ const CRM: React.FC<CRMProps> = ({ history, reminders, setReminders }) => {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex justify-between items-center">
-                <div><h2 className="text-2xl font-bold text-slate-900">CRM</h2><p className="text-slate-500 text-sm">Automated Reminders</p></div>
-                <button onClick={runAutoScheduler} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-500/30 flex items-center text-sm font-bold"><CalendarClock className="w-4 h-4 mr-2" /> Auto-Schedule</button>
+            <div>
+                <h2 className="text-2xl font-bold text-slate-900">CRM</h2>
+                <p className="text-slate-500 text-sm">Automated Reminders</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {reminders.map(r => (
